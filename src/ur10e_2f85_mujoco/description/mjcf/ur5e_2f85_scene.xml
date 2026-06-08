@@ -1,0 +1,150 @@
+<mujoco model="ur5e_2f85_scene">
+  <compiler angle="radian" meshdir="." autolimits="true"/>
+  <include file="robot/ur5e_2f85_robot.xml"/>
+
+  <option gravity="0 0 -0.1"/>
+
+
+  <option cone="elliptic" impratio="10" integrator="implicitfast"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <statistic center="0.3 0 0.4" extent="0.8"/>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <mesh name="sigmund_table" file="../meshes/environment/sigmund_table.stl" scale="1 1 1"/>
+    <mesh name="hammer_head" file="hammer/assets/hammer_head.stl"/>
+    <mesh name="hammer_neck" file="hammer/assets/hammer_neck.stl"/>
+    <mesh name="hammer_contact0" file="hammer/assets/contact0.stl"/>
+    <mesh name="hammer_contact1" file="hammer/assets/contact1.stl"/>
+  </asset>
+
+  <worldbody>
+    <!-- <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/> -->
+    <light pos="10 10 1.5" dir="0 0 -1" directional="true"/>
+
+
+    <!-- <body name="table_center" pos="0.4 -0.6 0.74">
+      <site name="table_center_site" size="0.01" group="6" rgba="1 1 1 0"/>
+    </body> -->
+
+
+    <body name="table_overview_mount" pos="0 0 1.5" quat="0 0 0.382683 0.923879">
+    <!-- 相机 -->
+    <camera name="table_overview" mode="fixed" pos="0 0 0" fovy="28" resolution="640 480"/>
+    <!-- 相机位姿标记 -->
+    <site name="table_overview_site" type="sphere" size="0.02" group="6" rgba="1 1 0 0.9"/>
+    <geom name="table_overview_x_axis" type="capsule" fromto="0 0 0 0.12 0 0" size="0.003"
+      contype="0" conaffinity="0" rgba="1 0 0 1"/>
+    <geom name="table_overview_y_axis" type="capsule" fromto="0 0 0 0 0.12 0" size="0.003"
+      contype="0" conaffinity="0" rgba="0 1 0 1"/>
+    <geom name="table_overview_z_axis" type="capsule" fromto="0 0 0 0 0 0.12" size="0.003"
+      contype="0" conaffinity="0" rgba="0 0 1 1"/>
+    <geom name="table_overview_frustum_hint" type="capsule" fromto="0 0 0 0 0 -0.16" size="0.0025"
+      contype="0" conaffinity="0" rgba="1 1 0 0.8"/>
+    </body>
+
+    
+
+    <geom name="table3_green_zone" type="box"
+        pos="0 -0.9 0.7392"
+        size="0.8 0.3 0.001"
+        rgba="0.6 0.85 0.6 0.1"
+        contype="0" conaffinity="0"/>
+   
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+    <body name="table1" pos="0 0 0.74">
+      <geom name="table1" type="mesh" mesh="sigmund_table" group="2" rgba="0.35 0.35 0.35 1" mass="0"
+        contype="0" conaffinity="0"/>
+      <geom name="table1_top_collision" type="box" pos="-0.4 0.6 -0.005" size="0.4 0.6 0.005" rgba="0.35 0.35 0.35 0"
+        mass="0"/>
+    </body>
+    <body name="table2" pos="0.8 0 0.74">
+      <geom name="table2" type="mesh" mesh="sigmund_table" group="2" rgba="0.35 0.35 0.35 1" mass="0"
+        contype="0" conaffinity="0"/>
+      <geom name="table2_top_collision" type="box" pos="-0.4 0.6 -0.005" size="0.4 0.6 0.005" rgba="0.35 0.35 0.35 0"
+        mass="0"/>
+    </body>
+    <body name="table3" pos="0 -1.2 0.74">
+      <geom name="table3" type="mesh" mesh="sigmund_table" group="2" rgba="0.35 0.35 0.35 1" mass="0"
+        contype="0" conaffinity="0"/>
+      <geom name="table3_top_collision" type="box" pos="-0.4 0.6 -0.005" size="0.4 0.6 0.005" rgba="0.35 0.35 0.35 0"
+        mass="0"/>
+
+    </body>
+    <body name="table4" pos="0.8 -1.2 0.74">
+      <geom name="table4" type="mesh" mesh="sigmund_table" group="2" rgba="0.35 0.35 0.35 1" mass="0"
+        contype="0" conaffinity="0"/>
+      <geom name="table4_top_collision" type="box" pos="-0.4 0.6 -0.005" size="0.4 0.6 0.005" rgba="0.35 0.35 0.35 0"
+        mass="0"/>
+    </body>
+    <body name="world_frame" pos="0 0 0.74" quat="1 0 0 0">
+      <site name="world_frame_site" size="0.01" group="6" rgba="1 1 1 0.25"/>
+      <geom name="world_x_axis" type="capsule" fromto="0 0 0 0.5 0 0" size="0.003" contype="0" conaffinity="0"
+        rgba="1 0 0 1"/>
+      <geom name="world_y_axis" type="capsule" fromto="0 0 0 0 0.5 0" size="0.003" contype="0" conaffinity="0"
+        rgba="0 1 0 1"/>
+      <geom name="world_z_axis" type="capsule" fromto="0 0 0 0 0 0.5" size="0.003" contype="0" conaffinity="0"
+        rgba="0 0 1 1"/>
+      <geom name="world_x_tick_01" type="capsule" fromto="0.1 -0.015 0 0.1 0.015 0" size="0.0018" contype="0" conaffinity="0" rgba="1 0 0 0.9"/>
+      <geom name="world_x_tick_02" type="capsule" fromto="0.2 -0.015 0 0.2 0.015 0" size="0.0018" contype="0" conaffinity="0" rgba="1 0 0 0.9"/>
+      <geom name="world_x_tick_03" type="capsule" fromto="0.3 -0.015 0 0.3 0.015 0" size="0.0018" contype="0" conaffinity="0" rgba="1 0 0 0.9"/>
+      <geom name="world_x_tick_04" type="capsule" fromto="0.4 -0.015 0 0.4 0.015 0" size="0.0018" contype="0" conaffinity="0" rgba="1 0 0 0.9"/>
+      <geom name="world_x_tick_05" type="capsule" fromto="0.5 -0.02 0 0.5 0.02 0" size="0.0022" contype="0" conaffinity="0" rgba="1 0 0 1"/>
+      <geom name="world_y_tick_01" type="capsule" fromto="-0.015 0.1 0 0.015 0.1 0" size="0.0018" contype="0" conaffinity="0" rgba="0 1 0 0.9"/>
+      <geom name="world_y_tick_02" type="capsule" fromto="-0.015 0.2 0 0.015 0.2 0" size="0.0018" contype="0" conaffinity="0" rgba="0 1 0 0.9"/>
+      <geom name="world_y_tick_03" type="capsule" fromto="-0.015 0.3 0 0.015 0.3 0" size="0.0018" contype="0" conaffinity="0" rgba="0 1 0 0.9"/>
+      <geom name="world_y_tick_04" type="capsule" fromto="-0.015 0.4 0 0.015 0.4 0" size="0.0018" contype="0" conaffinity="0" rgba="0 1 0 0.9"/>
+      <geom name="world_y_tick_05" type="capsule" fromto="-0.02 0.5 0 0.02 0.5 0" size="0.0022" contype="0" conaffinity="0" rgba="0 1 0 1"/>
+      <geom name="world_z_tick_01" type="capsule" fromto="-0.015 0 0.1 0.015 0 0.1" size="0.0018" contype="0" conaffinity="0" rgba="0 0 1 0.9"/>
+      <geom name="world_z_tick_02" type="capsule" fromto="-0.015 0 0.2 0.015 0 0.2" size="0.0018" contype="0" conaffinity="0" rgba="0 0 1 0.9"/>
+      <geom name="world_z_tick_03" type="capsule" fromto="-0.015 0 0.3 0.015 0 0.3" size="0.0018" contype="0" conaffinity="0" rgba="0 0 1 0.9"/>
+      <geom name="world_z_tick_04" type="capsule" fromto="-0.015 0 0.4 0.015 0 0.4" size="0.0018" contype="0" conaffinity="0" rgba="0 0 1 0.9"/>
+      <geom name="world_z_tick_05" type="capsule" fromto="-0.02 0 0.5 0.02 0 0.5" size="0.0022" contype="0" conaffinity="0" rgba="0 0 1 1"/>
+    </body>
+
+    <body name="Cube1" pos="0 -0.8 0.765">
+      <freejoint name="cube1_joint"/>
+      <geom type="box" size="0.025 0.025 0.025" rgba="0.8 0.2 0.2 1"/>
+      <site name="cube1_frame" pos="0 0 0" size="0.02" group="6" rgba="1 1 1 0"/>
+    </body>
+
+    <body name="Cube2" pos="-0.2 -0.8 0.765">
+      <freejoint name="cube2_joint"/>
+      <geom type="box" size="0.025 0.025 0.025" rgba="0 1 0 1"/>
+      <site name="cube2_frame" pos="0 0 0" size="0.02" group="6" rgba="1 1 1 0"/>
+    </body>
+
+    <body name="Cube3" pos="0.2 -0.8 0.765">
+      <freejoint name="cube3_joint"/>
+      <geom type="box" size="0.025 0.025 0.025" rgba="0 0 1 1"/>
+      <site name="cube3_frame" pos="0 0 0" size="0.02" group="6" rgba="1 1 1 0"/>
+    </body>
+
+    <body name="Hammer" pos="-0.0 -1.1 0.79" quat="1 0 0 0">
+      <freejoint name="hammer_joint"/>
+      <geom name="hammer_head_visual" type="mesh" mesh="hammer_head" rgba="0.7 0.7 0.7 1"
+        contype="0" conaffinity="0"/>
+      <geom name="hammer_neck_visual" type="mesh" mesh="hammer_neck" rgba="0.73 0.5 0.39 1"
+        contype="0" conaffinity="0"/>
+      <geom name="hammer_contact_geom0" type="mesh" mesh="hammer_contact0" condim="4"
+        friction="1 0.005 0.0001" rgba="0.7 0.7 0.7 0"/>
+      <geom name="hammer_contact_geom1" type="mesh" mesh="hammer_contact1" condim="4"
+        friction="1 0.005 0.0001" rgba="0.7 0.7 0.7 0"/>
+      <site name="hammer_frame" pos="0 0 0" size="0.015" group="6" rgba="1 1 1 0"/>
+    </body>
+
+    <body name="floor0" pos="0 0.75 0">
+      <site name="target0" pos="0 0 0.5" size="0.02" group="6" rgba="1 0 0 0"/>
+    </body>
+  </worldbody>
+
+</mujoco>

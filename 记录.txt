@@ -1,0 +1,70 @@
+ros2控制周期0.01s
+mujoco仿真布长0.002s
+
+
+moveit需要ros-jazzy-joint-trajectory-controller
+需要ompl轨迹规划库插件
+
+ompl_planning.yaml配置轨迹规划算法
+
+
+单独启动mujoco：/opt/ros/jazzy/opt/mujoco_vendor/bin/simulate src/ur10e_2f85_mujoco/description/mjcf/ur5e_2f85_scene.xml
+
+moveit_py包
+
+cd /home/lx/dev_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+python3 src/moveitpy_tools/moveitpy_server.py
+
+
+cd /home/lx/dev_ws
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select simple_mtc_demo ur5e_2f85_moveit_config
+source install/setup.bash
+ros2 launch ur5e_2f85_moveit_config demo.launch.py
+
+# 默认 headless:=true：不开 MuJoCo 原生 GUI，只开 RViz/MoveIt，避免 MuJoCo rendering thread 的 std::bad_alloc
+# 如需尝试 MuJoCo 原生窗口：
+# ros2 launch ur5e_2f85_moveit_config demo.launch.py headless:=false rviz:=true
+
+source install/setup.bash
+
+# 把三个 cube 加入 MoveIt Planning Scene
+ros2 run ur5e_2f85_moveit_config planning_scene_cubes.py add all
+
+# 抓住 Cube1 后，把 Cube1 attach 到 tool_frame
+ros2 run ur5e_2f85_moveit_config planning_scene_cubes.py attach Cube1 --link tool_frame
+
+# 松开后，把 Cube1 detach 回 world，默认放回初始 MuJoCo 位置
+ros2 run ur5e_2f85_moveit_config planning_scene_cubes.py detach Cube1 --link tool_frame
+
+# 或者 detach 到指定世界坐标
+ros2 run ur5e_2f85_moveit_config planning_scene_cubes.py detach Cube1 --xyz 0.0 -0.8 0.765
+
+
+ x 0.18711172278417798, "y": -0.7985649254716306, "z": 0.8351374618001945, "roll": 3.0493205421439415, "pitch": -0.007690320867468654, "yaw": -3.0331575573340235
+
+## 启动方式
+
+业务上不再区分运行时在线/离线模式：
+
+- 设备智能体未启动时，设备就是离线。
+- 设备智能体通过 `main.py` 启动后，设备就是在线接入状态。
+
+生产启动方式：
+
+```bash
+python3 /home/lx/dev_ws/src/main.py
+```
+
+本地调试启动方式：
+
+```bash
+python3 /home/lx/dev_ws/src/main.py --debug
+```
+
+`--debug` 只是本地调试输入源，终端提示为 `用户:`，用于调试、测试和本地控制；它不是业务离线状态。
+agent 不要通过自然语言调用 CLI 切换在线/离线。
+
+/home/lx/dev_ws/src/.venv/bin/python src/main.py --virtual-devices

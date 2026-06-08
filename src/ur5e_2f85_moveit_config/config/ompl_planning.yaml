@@ -1,0 +1,64 @@
+planning_plugins:
+  - ompl_interface/OMPLPlanner
+request_adapters:
+  - default_planning_request_adapters/ResolveConstraintFrames
+  - default_planning_request_adapters/ValidateWorkspaceBounds
+  - default_planning_request_adapters/CheckStartStateBounds
+  - default_planning_request_adapters/CheckStartStateCollision
+response_adapters:
+  - default_planning_response_adapters/AddTimeOptimalParameterization
+  - default_planning_response_adapters/ValidateSolution
+  - default_planning_response_adapters/DisplayMotionPath
+
+planner_configs:
+  APSConfigDefault:
+    type: geometric::AnytimePathShortening
+    shortcut: 1
+    hybridize: 1
+    max_hybrid_paths: 24
+    num_planners: 4
+    planners: "RRTConnect,RRTConnect,RRTConnect,RRTConnect"
+  RRTConnectkConfigDefault:
+    type: geometric::RRTConnect
+    range: 0.0
+  RRTkConfigDefault:
+    type: geometric::RRT
+    range: 0.0
+    goal_bias: 0.05
+  PRMkConfigDefault:
+    type: geometric::PRM
+    max_nearest_neighbors: 10
+  ESTkConfigDefault:
+    type: geometric::EST
+    range: 0.0
+    goal_bias: 0.05
+  KPIECEkConfigDefault:
+    type: geometric::KPIECE
+    range: 0.0
+    goal_bias: 0.05
+    border_fraction: 0.9
+    failed_expansion_score_factor: 0.5
+    min_valid_path_fraction: 0.5
+
+arm:
+  default_planner_config: RRTConnectkConfigDefault
+  planner_configs:
+    - APSConfigDefault
+    - RRTConnectkConfigDefault
+    - RRTkConfigDefault
+    - PRMkConfigDefault
+    - ESTkConfigDefault
+    - KPIECEkConfigDefault
+
+gripper:
+  default_planner_config: RRTConnectkConfigDefault
+  planner_configs:
+    - RRTConnectkConfigDefault
+
+arm_with_gripper:
+  default_planner_config: RRTConnectkConfigDefault
+  planner_configs:
+    - APSConfigDefault
+    - RRTConnectkConfigDefault
+    - RRTkConfigDefault
+    - PRMkConfigDefault

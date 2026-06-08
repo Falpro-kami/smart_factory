@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="ur5e_2f85">
+  <group name="arm">
+    <chain base_link="base_link" tip_link="tool_frame"/>
+  </group>
+
+  <group name="gripper">
+    <joint name="left_driver_joint"/>
+  </group>
+
+  <group name="arm_with_gripper">
+    <group name="arm"/>
+    <group name="gripper"/>
+  </group>
+
+  <group_state name="home" group="arm">
+    <joint name="shoulder_pan_joint" value="0.0"/>
+    <joint name="shoulder_lift_joint" value="0.0"/>
+    <joint name="elbow_joint" value="0.0"/>
+    <joint name="wrist_1_joint" value="0.0"/>
+    <joint name="wrist_2_joint" value="0.0"/>
+    <joint name="wrist_3_joint" value="0.0"/>
+  </group_state>
+
+  <group_state name="open" group="gripper">
+    <joint name="left_driver_joint" value="0.0"/>
+  </group_state>
+
+  <group_state name="closed" group="gripper">
+    <joint name="left_driver_joint" value="0.72"/>
+  </group_state>
+
+  <end_effector name="robotiq_2f85" parent_link="tool_frame" group="gripper" parent_group="arm"/>
+
+  <passive_joint name="right_driver_joint"/>
+  <passive_joint name="left_coupler_joint"/>
+  <passive_joint name="right_coupler_joint"/>
+  <passive_joint name="left_spring_link_joint"/>
+  <passive_joint name="right_spring_link_joint"/>
+  <passive_joint name="left_follower_joint"/>
+  <passive_joint name="right_follower_joint"/>
+
+  <disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent"/>
+  <disable_collisions link1="shoulder_link" link2="upper_arm_link" reason="Adjacent"/>
+  <disable_collisions link1="upper_arm_link" link2="forearm_link" reason="Adjacent"/>
+  <disable_collisions link1="forearm_link" link2="wrist_1_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_1_link" link2="wrist_2_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_2_link" link2="wrist_3_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_3_link" link2="tool0" reason="Adjacent"/>
+  <disable_collisions link1="tool0" link2="gripper_base_mount" reason="Adjacent"/>
+  <disable_collisions link1="gripper_base_mount" link2="gripper_base" reason="Adjacent"/>
+  <disable_collisions link1="gripper_base" link2="gripper_left_driver" reason="Adjacent"/>
+  <disable_collisions link1="gripper_base" link2="gripper_right_driver" reason="Adjacent"/>
+  <disable_collisions link1="gripper_base_mount" link2="wrist_3_link" reason="Adjacent"/>
+  <disable_collisions link1="gripper_base" link2="wrist_3_link" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_base" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_left_driver" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_right_driver" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_left_coupler" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_right_coupler" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_left_spring_link" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_right_spring_link" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_left_follower" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_right_follower" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_left_pad" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_right_pad" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_left_silicone_pad" reason="Never"/>
+  <disable_collisions link1="tool0" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_left_driver" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_right_driver" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_left_coupler" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_right_coupler" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_left_spring_link" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_right_spring_link" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_left_follower" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_right_follower" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_left_pad" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_right_pad" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_left_silicone_pad" reason="Never"/>
+  <disable_collisions link1="wrist_3_link" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_left_coupler" reason="Adjacent"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_left_spring_link" reason="Adjacent"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_left_follower" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_left_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_left_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_base_mount" reason="Never"/>
+  <disable_collisions link1="gripper_left_spring_link" link2="gripper_left_follower" reason="Adjacent"/>
+  <disable_collisions link1="gripper_left_spring_link" link2="gripper_left_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_left_spring_link" link2="gripper_left_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_spring_link" link2="gripper_left_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_follower" link2="gripper_left_pad" reason="Adjacent"/>
+  <disable_collisions link1="gripper_left_follower" link2="gripper_left_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_left_follower" link2="gripper_left_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_pad" link2="gripper_left_silicone_pad" reason="Adjacent"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_right_coupler" reason="Adjacent"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_right_spring_link" reason="Adjacent"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_right_follower" reason="Never"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_right_pad" reason="Never"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_base_mount" reason="Never"/>
+  <disable_collisions link1="gripper_right_spring_link" link2="gripper_right_follower" reason="Adjacent"/>
+  <disable_collisions link1="gripper_right_spring_link" link2="gripper_right_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_right_spring_link" link2="gripper_right_pad" reason="Never"/>
+  <disable_collisions link1="gripper_right_spring_link" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_right_follower" link2="gripper_right_pad" reason="Adjacent"/>
+  <disable_collisions link1="gripper_right_follower" link2="gripper_right_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_right_follower" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_right_pad" link2="gripper_right_silicone_pad" reason="Adjacent"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_right_driver" reason="Never"/>
+  <disable_collisions link1="gripper_left_coupler" link2="gripper_right_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_left_spring_link" link2="gripper_right_spring_link" reason="Never"/>
+  <disable_collisions link1="gripper_left_follower" link2="gripper_right_follower" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_right_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_left_coupler" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_right_spring_link" reason="Never"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_left_spring_link" reason="Never"/>
+  <disable_collisions link1="gripper_left_driver" link2="gripper_right_follower" reason="Never"/>
+  <disable_collisions link1="gripper_right_driver" link2="gripper_left_follower" reason="Never"/>
+  <disable_collisions link1="gripper_left_pad" link2="gripper_right_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_silicone_pad" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_left_pad" link2="gripper_right_silicone_pad" reason="Never"/>
+  <disable_collisions link1="gripper_right_pad" link2="gripper_left_silicone_pad" reason="Never"/>
+  <disable_collisions link1="base_link" link2="table_1" reason="Never"/>
+  <disable_collisions link1="base_link" link2="table_2" reason="Never"/>
+  <disable_collisions link1="base_link" link2="table_3" reason="Never"/>
+  <disable_collisions link1="base_link" link2="table_4" reason="Never"/>
+  <disable_collisions link1="table_1" link2="table_2" reason="Never"/>
+  <disable_collisions link1="table_1" link2="table_3" reason="Never"/>
+  <disable_collisions link1="table_1" link2="table_4" reason="Never"/>
+  <disable_collisions link1="table_2" link2="table_3" reason="Never"/>
+  <disable_collisions link1="table_2" link2="table_4" reason="Never"/>
+  <disable_collisions link1="table_3" link2="table_4" reason="Never"/>
+</robot>

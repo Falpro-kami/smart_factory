@@ -1,0 +1,127 @@
+{
+  "process_id": "PROC-001",
+  "task1": [
+    {
+  "operation": "PTP",
+  "parameters": {
+    "x": 0.19723947534997788,
+    "y": -0.792297576031963,
+    "z": 0.85,
+    "roll": 3.14,
+    "pitch": 0.0,
+    "yaw": -3.14
+  }
+    },
+
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": 0.07
+      }
+    },
+
+    {
+      "operation": "grasp",
+      "parameters": {
+        "state": 1
+      }
+    },
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": -0.07
+      }
+    },
+    {
+  "operation": "PTP",
+  "parameters": {
+    "x": 0,
+    "y": -0.8,
+    "z": 0.95,
+    "roll": 3.14,
+    "pitch": 0.0,
+    "yaw": -3.14
+  }
+    },
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": 0.12
+      }
+    },
+    {
+      "operation": "grasp",
+      "parameters": {
+        "state": 0
+      }
+    },
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": -0.07
+      }
+    },
+    {
+  "operation": "PTP",
+  "parameters": {
+    "x": -0.2,
+    "y": -0.8,
+    "z": 0.85,
+    "roll": 3.14,
+    "pitch": 0.0,
+    "yaw": -3.14
+  }
+    },
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": 0.07
+      }
+    },
+    {
+      "operation": "grasp",
+      "parameters": {
+        "state": 1
+      }
+    },
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": -0.07
+      }
+    },
+    {
+  "operation": "PTP",
+  "parameters": {
+    "x": 0,
+    "y": -0.8,
+    "z": 1.0,
+    "roll": 3.14,
+    "pitch": 0.0,
+    "yaw": -3.14
+  }
+    },
+    {
+      "operation": "LIN",
+      "parameters": {
+        "frame": "tool_frame",
+        "dz": 0.12
+      }
+    },
+    {
+      "operation": "grasp",
+      "parameters": {
+        "state": 0
+      }
+    },
+    {
+      "operation": "HOME"
+    }
+  ]
+}

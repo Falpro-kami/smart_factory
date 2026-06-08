@@ -1,0 +1,90 @@
+# ROS 2 / colcon build outputs
+/build/
+/install/
+/log/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+/src/.venv/
+
+# Runtime logs and simulator output
+*.log
+*.out
+*.err
+MUJOCO_LOG.TXT
+mujoco_log.txt
+
+# Local runtime state / message-queue shims
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.jsonl
+/src/agent/device_agent_state.json
+/src/agent/device_status.sqlite3
+/src/agent/device_workorder_status.sqlite3
+/src/agent/device_adapter_pending.sqlite3
+
+# Environment and local credentials
+.env
+.env.*
+!.env.example
+/src/vision/.env
+
+# Claude local settings. Keep skills and tasks tracked.
+/src/.claude/settings.local.json
+
+# Editor / IDE local files
+/.vscode/
+/src/.vscode/
+*.swp
+*.swo
+*~
+
+# Codex / local agent scratch files
+/.codex
+/.agents/
+.agents
+
+# Downloaded local tools / binary distributions
+/tools/rocketmq
+/tools/rocketmq/
+/tools/rocketmq*/
+
+# CMake / native build leftovers outside colcon build dir
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Native binaries and shared libraries generated during builds
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Large/generated ML or perception artifacts
+*.pth
+*.pt
+*.onnx
+*.engine
+*.ckpt
+*.npz
+*.npy

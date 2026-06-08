@@ -1,0 +1,150 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /MotionPlanning1
+  - Class: rviz_common/Help
+    Name: Help
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+    - Class: moveit_rviz_plugin/MotionPlanning
+      Name: MotionPlanning
+      Scene Robot:
+        Attached Body Color: 150; 50; 150
+        Links:
+          All Links Enabled: true
+          Expand Joint Details: false
+          Expand Link Details: false
+          Expand Tree: false
+          Link Tree Style: Links in Alphabetic Order
+          Show Axes: false
+          Show Trail: false
+        Robot Alpha: 1
+        Show Robot Collision: false
+        Show Robot Visual: true
+      Planned Path:
+        Links:
+          All Links Enabled: true
+          Expand Joint Details: false
+          Expand Link Details: false
+          Expand Tree: false
+          Link Tree Style: Links in Alphabetic Order
+          Show Axes: false
+          Show Trail: false
+        Loop Animation: true
+        Robot Alpha: 0.35
+        Show Robot Collision: false
+        Show Robot Visual: true
+        State Display Time: 0.05 s
+        Trajectory Topic: display_planned_path
+      Planning Scene Topic: monitored_planning_scene
+      Robot Description: robot_description
+      Scene Geometry:
+        Scene Alpha: 1
+      Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Enable Transparency: true
+      Name: InteractiveMarkers
+      Topic: /rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        base_link:
+          Value: false
+        forearm_link:
+          Value: false
+        gripper_base:
+          Value: false
+        gripper_base_mount:
+          Value: false
+        gripper_left_coupler:
+          Value: false
+        gripper_left_driver:
+          Value: false
+        gripper_left_follower:
+          Value: false
+        gripper_left_pad:
+          Value: false
+        gripper_left_silicone_pad:
+          Value: false
+        gripper_left_spring_link:
+          Value: false
+        gripper_right_coupler:
+          Value: false
+        gripper_right_driver:
+          Value: false
+        gripper_right_follower:
+          Value: false
+        gripper_right_pad:
+          Value: false
+        gripper_right_silicone_pad:
+          Value: false
+        gripper_right_spring_link:
+          Value: false
+        pinch:
+          Value: true
+        shoulder_link:
+          Value: false
+        table_1:
+          Value: false
+        table_2:
+          Value: false
+        table_3:
+          Value: false
+        table_4:
+          Value: false
+        tool0:
+          Value: false
+        tool_frame:
+          Value: false
+        upper_arm_link:
+          Value: false
+        world:
+          Value: false
+        world_frame:
+          Value: true
+        wrist_1_link:
+          Value: false
+        wrist_2_link:
+          Value: false
+        wrist_3_link:
+          Value: false
+      Marker Scale: 0.3
+      Name: TF
+      Show Arrows: false
+      Show Axes: true
+      Show Names: false
+      Value: true
+  Global Options:
+    Fixed Frame: world_frame
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.2
+      Focal Point:
+        X: -0.35
+        Y: -0.15
+        Z: 0.30
+      Name: Current View
+      Pitch: 0.6
+      Target Frame: world_frame
+      Yaw: 0.2
+Window Geometry:
+  Height: 960
+  Motion Planning Tasks:
+    collapsed: false
+  Width: 1440

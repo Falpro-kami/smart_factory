@@ -1,0 +1,62 @@
+  <mujocoinclude>
+   <default class="main">
+    <default class="ur10e">
+      <material shininess="0.25"/>
+      <joint range="-6.28319 6.28319" armature="0.1"/>
+      <general ctrlrange="-6.2831 6.2831" biastype="affine" gainprm="5000 0 0 0 0 0 0 0 0 0" biasprm="0 -5000 -500 0 0 0 0 0 0 0"/>
+      <default class="size4">
+        <joint damping="10"/>
+        <general forcerange="-330 330"/>
+      </default>
+      <default class="size3">
+        <joint damping="5"/>
+        <general forcerange="-150 150"/>
+        <default class="size3_limited">
+          <joint range="-3.1415 3.1415"/>
+          <general ctrlrange="-3.1415 3.1415"/>
+        </default>
+      </default>
+      <default class="size2">
+        <joint damping="2"/>
+        <general forcerange="-56 56"/>
+      </default>
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+      </default>
+      <default class="collision">
+        <geom type="capsule" group="3"/>
+        <default class="eef_collision">
+          <geom type="cylinder"/>
+        </default>
+      </default>
+    </default>
+    <default class="2f85">
+      <mesh scale="0.001 0.001 0.001"/>
+      <general biastype="affine"/>
+      <default class="driver">
+        <joint solreflimit="0.005 1" solimplimit="0.95 0.99 0.001 0.5 2" range="0 0.8" armature="0.005" damping="0.1"/>
+      </default>
+      <default class="follower">
+        <joint solreflimit="0.005 1" solimplimit="0.95 0.99 0.001 0.5 2" range="-0.872664 0.872664"/>
+      </default>
+      <default class="spring_link">
+        <joint springref="2.62" stiffness="0.05" range="-0.296706 0.8" damping="0.00125"/>
+      </default>
+      <default class="coupler">
+        <joint solreflimit="0.005 1" solimplimit="0.95 0.99 0.001 0.5 2" range="-1.57 0"/>
+      </default>
+      <default class="visual2">
+        <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+      </default>
+      <default class="collision2">
+        <geom type="mesh" group="3"/>
+        <default class="pad_box1">
+          <geom size="0.011 0.004 0.009375" type="box" priority="1" friction="2.0 0.005 0.0001" solref="0.004 1" solimp="0.95 0.99 0.001 0.5 2" rgba="0.55 0.55 0.55 1"/>
+        </default>
+        <default class="pad_box2">
+          <geom size="0.011 0.004 0.009375" type="box" priority="1" friction="2.0 0.005 0.0001" solref="0.004 1" solimp="0.95 0.99 0.001 0.5 2" rgba="0.45 0.45 0.45 1"/>
+        </default>
+      </default>
+    </default>
+  </default>
+</mujocoinclude>

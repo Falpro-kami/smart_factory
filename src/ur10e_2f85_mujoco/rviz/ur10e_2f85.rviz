@@ -1,0 +1,116 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: false
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: world_frame
+      Value: false
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Use Mesh Materials: false
+      Value: true
+      Visual Enabled: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        base_link:
+          Value: false
+        elbow_link:
+          Value: false
+        forearm_link:
+          Value: false
+        gripper_base:
+          Value: false
+        gripper_base_mount:
+          Value: false
+        gripper_left_coupler:
+          Value: false
+        gripper_left_driver:
+          Value: false
+        gripper_left_follower:
+          Value: false
+        gripper_left_pad:
+          Value: false
+        gripper_left_silicone_pad:
+          Value: false
+        gripper_left_spring_link:
+          Value: false
+        gripper_right_coupler:
+          Value: false
+        gripper_right_driver:
+          Value: false
+        gripper_right_follower:
+          Value: false
+        gripper_right_pad:
+          Value: false
+        gripper_right_silicone_pad:
+          Value: false
+        gripper_right_spring_link:
+          Value: false
+        pinch:
+          Value: false
+        shoulder_link:
+          Value: false
+        tool0:
+          Value: false
+        tool_frame:
+          Value: true
+        upper_arm_link:
+          Value: false
+        world:
+          Value: false
+        world_frame:
+          Value: true
+        wrist_1_link:
+          Value: false
+        wrist_2_link:
+          Value: false
+        wrist_3_link:
+          Value: false
+      Marker Scale: 0.3
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: world_frame
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 1.4
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.35
+      Pitch: 0.7
+      Yaw: 0.8
