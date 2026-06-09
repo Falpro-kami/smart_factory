@@ -226,7 +226,7 @@ GET  /api/digital-twin/entities/{entity_type}/{entity_id}
 - `/api/digital-twin/devices`：读取 MySQL `device` 数据库中的设备、工站、仓库和 AGV 实例。
 - `/api/digital-twin/store`：读取 MySQL `store` 相关物料库存数据。
 - `/api/digital-twin/data`：读取 MySQL `Data` 数据库中的订单工单历史、设备运行历史、质检追溯和 AGV 任务汇总，并执行 ontology 规则推理。
-- `/api/digital-twin/agv/tasks`：读取 MySQL `AGV.tasks`，返回 AGV 运输任务和状态统计。
+- `/api/digital-twin/agv/tasks`：读取 MySQL `order.work_orders` 中的 AGV 运输工单，返回 AGV 运输任务和状态统计。
 - `/api/digital-twin/entities/*`：按实体类型读取列表或详情，供前端属性视图和全局搜索使用。
 
 ## 数字孪生前端
@@ -266,7 +266,7 @@ digital-twin-frontend/README.md
 
 1. 订单下发后写入 MySQL `Data.order_work_order_history`。
 2. 订单按工序拆分为多条工单，每条工单记录目标工站、开始/结束时间和执行状态。
-3. 后端根据工单顺序生成 AGV 小车运输任务，并写入 MySQL `AGV.tasks`。
+3. 后端根据工单顺序生成 AGV 小车运输任务，并写入 MySQL `order.work_orders` 中的 AGV 运输工单。
 4. 前端读取 `/api/digital-twin/agv/tasks` 后，将等待中、运输中的 AGV 任务同步到 `Ontology / Devices` 的设备当前任务。
 5. 已完成、已取消的 AGV 任务从设备当前任务移出，并归并到 `DATA / Devices` 的设备运行历史中。
 

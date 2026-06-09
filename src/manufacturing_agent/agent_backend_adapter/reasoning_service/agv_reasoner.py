@@ -21,6 +21,6 @@ def observe_agv_tasks(agv_task_rows: list[dict[str, Any]]) -> RuleResult:
     return RuleResult(
         rule_id="agv-task",
         status="observed",
-        message="已从 AGV.tasks 读取或生成运输任务。",
+        message="已从 order.work_orders 读取 AGV 运输工单。",
         metrics={"agvTaskCount": len(agv_task_rows)},
     )

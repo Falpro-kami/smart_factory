@@ -112,6 +112,7 @@ WORK_ORDER_STATUSES = ("已创建", "受阻", "已下发", "已接收", "执行�
 ORDER_LEGACY_STATUSES = ("等待中", "已分配", "已取消", "已下单", "异常", "已接收", "执行中")
 WORK_ORDER_LEGACY_STATUSES = ("等待中", "已分配", "已取消", "已下单", "异常")
 SCHEDULER_QUEUE_TABLE = "scheduler_order_queue"
+WORK_ORDER_DELIVERY_LOG_TABLE = "work_order_delivery_log"
 
 
 def ensure_order_status_schema(cursor: Any) -> None:
@@ -154,6 +155,68 @@ def ensure_scheduler_queue_schema(cursor: Any) -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """
     )
+
+
+def ensure_work_order_delivery_log_schema(cursor: Any) -> None:
+    cursor.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {WORK_ORDER_DELIVERY_LOG_TABLE} (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            work_order_id VARCHAR(64) NOT NULL,
+            device_id VARCHAR(64) NOT NULL,
+            topic VARCHAR(128) NOT NULL,
+            tag VARCHAR(128) DEFAULT '',
+            message_key VARCHAR(128) NOT NULL,
+            message_id VARCHAR(128) DEFAULT '',
+            send_result VARCHAR(64) DEFAULT '',
+            send_output TEXT,
+            sent_at DATETIME NOT NULL,
+            INDEX idx_delivery_log_work_order (work_order_id),
+            INDEX idx_delivery_log_message_key (message_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
+
+
+def extract_mqadmin_send_result(output: str) -> dict[str, str]:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    for line in lines:
+        if "SEND_OK" not in line:
+            continue
+        parts = re.split(r"\s+", line)
+        return {
+            "send_result": next((part for part in parts if part == "SEND_OK"), "SEND_OK"),
+            "message_id": parts[-1] if parts else "",
+        }
+    return {"send_result": "", "message_id": ""}
+
+
+def record_work_order_delivery_log(message_payload: dict[str, Any], send_result: dict[str, Any]) -> None:
+    sent_at = datetime.now()
+    body = message_payload.get("body") if isinstance(message_payload.get("body"), dict) else {}
+    with get_mysql_connection("order") as conn:
+        with conn.cursor() as cursor:
+            ensure_work_order_delivery_log_schema(cursor)
+            cursor.execute(
+                f"""
+                INSERT INTO {WORK_ORDER_DELIVERY_LOG_TABLE} (
+                    work_order_id, device_id, topic, tag, message_key,
+                    message_id, send_result, send_output, sent_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    str(body.get("work_order_id") or message_payload.get("key") or ""),
+                    str(body.get("device_id") or message_payload.get("tag") or ""),
+                    str(message_payload.get("topic") or ""),
+                    str(message_payload.get("tag") or ""),
+                    str(message_payload.get("key") or ""),
+                    str(send_result.get("message_id") or ""),
+                    str(send_result.get("send_result") or ""),
+                    str(send_result.get("send_output") or send_result.get("send_result") or ""),
+                    sent_at,
+                ),
+            )
+        conn.commit()
 
 
 def rocketmq_config() -> dict[str, str | int]:
@@ -286,11 +349,16 @@ def send_rocketmq_message_with_mqadmin(message_payload: dict[str, Any]) -> dict[
     error = (completed.stderr or "").strip()
     if completed.returncode != 0:
         raise RuntimeError(error or output or f"mqadmin sendMessage failed: {completed.returncode}")
+    parsed = extract_mqadmin_send_result(output or error)
+    if parsed.get("send_result") != "SEND_OK":
+        raise RuntimeError(output or error or "mqadmin sendMessage did not return SEND_OK")
 
     return {
         "namesrv_addr": config["namesrv_addr"],
         "producer_group": config["producer_group"],
-        "send_result": output or error or "mqadmin sendMessage succeeded",
+        "send_result": parsed.get("send_result") or "SEND_OK",
+        "message_id": parsed.get("message_id") or "",
+        "send_output": output or error or "",
     }
 
 
@@ -386,6 +454,7 @@ def mark_work_order_dispatched(work_order_id: str) -> dict[str, Any]:
 def work_order_delivery(arguments: dict[str, Any]) -> dict[str, Any]:
     message_payload = build_work_order_delivery_message(arguments)
     send_result = send_rocketmq_message(message_payload)
+    record_work_order_delivery_log(message_payload, send_result)
     status_update = mark_work_order_dispatched(str(message_payload["key"]))
     result = {
         "success": True,
@@ -506,9 +575,14 @@ def fetch_device_runtime(device_id: str) -> dict[str, Any]:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT device_id, device_name, connection_state, status, updated_at
-                    FROM device_event_runtime
-                    WHERE device_id = %s OR device_name = %s
+                    SELECT
+                        `设备编号` AS device_id,
+                        `设备名称` AS device_name,
+                        `连接状态` AS connection_state,
+                        `运行状态` AS status,
+                        `更新时间` AS updated_at
+                    FROM devices
+                    WHERE `设备编号` = %s OR `设备名称` = %s
                     LIMIT 1
                     """,
                     (device_id, device_id),
@@ -627,6 +701,7 @@ def work_order_scheduler(arguments: dict[str, Any]) -> dict[str, Any]:
                 try:
                     message_payload = build_work_order_delivery_message(delivery_arguments)
                     send_result = send_rocketmq_message(message_payload)
+                    record_work_order_delivery_log(message_payload, send_result)
                     status_updated = set_work_order_status(cursor, work_order_id, "已下发", event_time)
                     cursor.execute(
                         f"""
@@ -1056,6 +1131,16 @@ def get_step_identity(step: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def process_code_for_step(step: dict[str, Any], process: dict[str, Any], fallback: Any) -> str:
+    explicit_code = step.get("process_code") or step.get("processCode") or process.get("code")
+    if explicit_code:
+        return str(explicit_code)
+    process_name = str(step.get("process_name") or process.get("name") or step.get("name") or "").strip()
+    if process_name == "堆积" or "堆积工序" in process_name:
+        return "PROC-001"
+    return str(fallback)
+
+
 def extract_assigned_device(step: dict[str, Any]) -> dict[str, Any] | None:
     nested_sources = [
         step,
@@ -1084,6 +1169,7 @@ def extract_assigned_device(step: dict[str, Any]) -> dict[str, Any] | None:
         "equipmentName",
         "station_name",
         "stationName",
+        "name",
     )
     location_keys = (
         "location",
@@ -1093,14 +1179,22 @@ def extract_assigned_device(step: dict[str, Any]) -> dict[str, Any] | None:
         "device_location",
         "deviceLocation",
     )
+    device_type_keys = (
+        "type",
+        "device_type",
+        "deviceType",
+        "category",
+    )
 
     device_id = None
     device_name = None
     location = None
+    device_type = None
     for source in nested_sources:
         device_id = device_id or first_present(source, device_id_keys)
         device_name = device_name or first_present(source, device_name_keys)
         location = location or first_present(source, location_keys)
+        device_type = device_type or first_present(source, device_type_keys)
 
     if not device_id and not device_name:
         return None
@@ -1109,6 +1203,8 @@ def extract_assigned_device(step: dict[str, Any]) -> dict[str, Any] | None:
         "device_id": clean_value(device_id),
         "device_name": clean_value(device_name),
         "location": clean_value(location),
+        "device_type": clean_value(device_type),
+        "source": "neo4j:craft.can_execute",
     }
 
 
@@ -1183,7 +1279,7 @@ def read_workstations() -> list[dict[str, Any]]:
     try:
         with get_mysql_connection("device") as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM `workstation`")
+                cursor.execute("SELECT * FROM `devices` WHERE `设备编号` <> 'DEV005'")
                 return [normalize_props(row) for row in cursor.fetchall()]
     except Exception:
         return []
@@ -1200,7 +1296,7 @@ def workstation_to_device(workstation: dict[str, Any]) -> dict[str, Any]:
         "workstation_id": clean_value(workstation_id),
         "workstation_name": clean_value(workstation_name),
         "status": clean_value(status),
-        "source": "mysql:device.workstation",
+        "source": "mysql:device.devices",
     }
 
 
@@ -1252,13 +1348,57 @@ def workstation_matches_step(workstation: dict[str, Any], step: dict[str, Any]) 
     )
 
 
+def device_name_match_key(value: Any) -> str:
+    text = normalize_match_text(value)
+    for token in ("自动化", "机器人", "加工", "工作站", "工站", "设备"):
+        text = text.replace(normalize_match_text(token), "")
+    return text
+
+
+def workstation_matches_assigned_device(workstation: dict[str, Any], assigned_device: dict[str, Any]) -> bool:
+    workstation_id = normalize_match_text(first_present_normalized(workstation, WORKSTATION_ID_KEYS))
+    workstation_name = first_present_normalized(workstation, WORKSTATION_NAME_KEYS)
+    assigned_id = normalize_match_text(assigned_device.get("device_id") or assigned_device.get("workstation_id"))
+    assigned_name = assigned_device.get("device_name") or assigned_device.get("workstation_name")
+    if assigned_id and workstation_id and assigned_id == workstation_id:
+        return True
+    workstation_key = device_name_match_key(workstation_name)
+    assigned_key = device_name_match_key(assigned_name)
+    if workstation_key and assigned_key and (workstation_key in assigned_key or assigned_key in workstation_key):
+        return True
+    assigned_type = normalize_match_text(assigned_device.get("device_type"))
+    workstation_text = normalize_match_text(f"{workstation_name} {workstation.get('设备名称')} {workstation.get('设备编号')}")
+    if assigned_type == "processing" and ("协作" in workstation_text or "加工" in workstation_text):
+        return True
+    if assigned_type == "storage" and ("仓库" in workstation_text or "立体" in workstation_text):
+        return True
+    return False
+
+
+def resolve_assigned_device(
+    assigned_device: dict[str, Any] | None,
+    workstations: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not assigned_device:
+        return None
+    for workstation in workstations:
+        if workstation_matches_assigned_device(workstation, assigned_device):
+            device = workstation_to_device(workstation)
+            device["source"] = assigned_device.get("source") or device.get("source")
+            return device
+    return assigned_device
+
+
 def assign_workstation(step: dict[str, Any], workstations: list[dict[str, Any]]) -> dict[str, Any] | None:
     for workstation in workstations:
         if workstation_matches_step(workstation, step):
             return workstation_to_device(workstation)
+    assigned_device = resolve_assigned_device(extract_assigned_device(step), workstations)
+    if assigned_device:
+        return assigned_device
     if len(workstations) == 1:
         return workstation_to_device(workstations[0])
-    return extract_assigned_device(step)
+    return None
 
 
 def device_changed(previous: dict[str, Any] | None, current: dict[str, Any] | None) -> bool:
@@ -1350,6 +1490,16 @@ def find_route_steps(session, product_node_id: str) -> list[dict[str, Any]]:
         OPTIONAL MATCH (proc)
         WHERE any(label IN labels(proc) WHERE toLower(label) = 'process')
           AND toString(proc.name) = toString(step.process_name)
+        OPTIONAL MATCH (craft)-[can_execute]-(device)
+        WHERE any(label IN labels(craft) WHERE toLower(label) = 'craft')
+          AND toLower(type(can_execute)) = 'can_execute'
+          AND any(label IN labels(device) WHERE toLower(label) = 'device')
+          AND (
+            toString(craft.name) = toString(step.process_name)
+            OR toString(craft.name) = toString(step.name)
+            OR toString(craft.name) = toString(proc.name)
+            OR toString(craft.name) = toString(proc.process_name)
+          )
         OPTIONAL MATCH (step)-[use_rel]->(used)
         WHERE toLower(type(use_rel)) = 'uses'
         OPTIONAL MATCH (step)-[produce_rel]->(produced)
@@ -1357,6 +1507,7 @@ def find_route_steps(session, product_node_id: str) -> list[dict[str, Any]]:
         RETURN
           properties(step) AS step_props,
           CASE WHEN proc IS NULL THEN properties(step) ELSE properties(proc) END AS process_props,
+          properties(device) AS device_props,
           collect(DISTINCT properties(used)) AS uses,
           collect(DISTINCT properties(produced)) AS produces,
           coalesce(step.order, step.stepId, step.name, step.process_name, '') AS sort_key
@@ -1368,9 +1519,12 @@ def find_route_steps(session, product_node_id: str) -> list[dict[str, Any]]:
     for record in process_instance_route:
         step_props = normalize_props(record["step_props"])
         process_props = normalize_props(record["process_props"] or {})
+        device_props = normalize_props(record["device_props"] or {})
         uses = [normalize_props(item) for item in record["uses"] if item]
         produces = [normalize_props(item) for item in record["produces"] if item]
         step_props["process"] = process_props
+        if device_props:
+            step_props["device"] = device_props
         step_props["uses"] = uses
         step_props["produces"] = produces
         process_steps.append(step_props)
@@ -1536,6 +1690,10 @@ def make_agv_transport_order(
         "process_id": "AGV-TRANSPORT",
         "process_name": "AGV运输",
         "assigned_device": assigned_agv,
+        "source_station": from_device.get("device_id") or from_device.get("workstation_id") or from_name,
+        "source_station_name": from_name,
+        "target_station": to_device.get("device_id") or to_device.get("workstation_id") or to_name,
+        "target_station_name": to_name,
         "predecessor_work_order_id": from_work_order.get("work_order_id"),
         "successor_work_order_id": to_work_order_id,
         "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -1560,6 +1718,8 @@ def normalize_work_order_chain(work_orders: list[dict[str, Any]]) -> list[dict[s
         work_order["前置工单"] = work_order.get("predecessor_work_order_id")
         work_order["后续工单"] = work_order.get("successor_work_order_id")
         work_order["分配工站"] = assigned_device.get("device_id") or assigned_device.get("workstation_id") or ""
+        work_order["起始工站"] = work_order.get("source_station") or ""
+        work_order["目标工站"] = work_order.get("target_station") or ""
         work_order["工单状态"] = work_order.get("status") or "已创建"
     return work_orders
 
@@ -1636,6 +1796,8 @@ def ensure_live_order_columns(cursor: Any) -> None:
         "前置工单": "`前置工单` VARCHAR(64) DEFAULT NULL",
         "后续工单": "`后续工单` VARCHAR(64) DEFAULT NULL",
         "分配工站": "`分配工站` VARCHAR(64) DEFAULT ''",
+        "起始工站": "`起始工站` VARCHAR(128) DEFAULT ''",
+        "目标工站": "`目标工站` VARCHAR(128) DEFAULT ''",
         "工单状态": "`工单状态` ENUM('已创建','受阻','已下发','已接收','执行中','已完成','失败') NOT NULL DEFAULT '已创建'",
         "创建时间": "`创建时间` DATETIME NULL",
         "更新时间": "`更新时间` DATETIME NULL",
@@ -1646,6 +1808,10 @@ def ensure_live_order_columns(cursor: Any) -> None:
     for column, definition in work_order_additions.items():
         if column not in work_order_columns:
             cursor.execute(f"ALTER TABLE `work_orders` ADD COLUMN {definition}")
+    try:
+        cursor.execute("ALTER TABLE `work_orders` MODIFY `description` TEXT")
+    except Exception as exc:
+        print(f"work order description schema sync skipped: {exc}", file=sys.stderr, flush=True)
     ensure_order_status_schema(cursor)
 
 
@@ -1712,12 +1878,12 @@ def persist_production_order(arguments: dict[str, Any], split_result: dict[str, 
                         """
                         INSERT INTO `work_orders` (
                             `工单ID`, `工单名称`, `所属订单号`, `工单类型`, `工序数量`, `已完成工序数量`,
-                            `工序编号`, `前置工单`, `后续工单`, `分配工站`, `工单状态`, `创建时间`,
+                            `工序编号`, `前置工单`, `后续工单`, `分配工站`, `起始工站`, `目标工站`, `工单状态`, `创建时间`,
                             `更新时间`, `description`
                         ) VALUES (
                             %(work_order_id)s, %(work_order_name)s, %(order_id)s, %(work_order_type)s,
                             %(process_quantity)s, 0, %(process_id)s, %(predecessor)s, %(successor)s,
-                            %(assigned_device)s, '已创建', %(created_at)s, %(updated_at)s, %(description)s
+                            %(assigned_device)s, %(source_station)s, %(target_station)s, '已创建', %(created_at)s, %(updated_at)s, %(description)s
                         )
                         """,
                         {
@@ -1735,6 +1901,8 @@ def persist_production_order(arguments: dict[str, Any], split_result: dict[str, 
                                 or work_order.get("分配工站")
                                 or ""
                             ),
+                            "source_station": str(work_order.get("source_station") or work_order.get("起始工站") or ""),
+                            "target_station": str(work_order.get("target_station") or work_order.get("目标工站") or ""),
                             "created_at": created_at,
                             "updated_at": now,
                             "description": str(work_order.get("description") or work_order.get("content") or ""),
@@ -1770,7 +1938,7 @@ def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
     product_name = str(arguments.get("product_name") or arguments.get("productName") or "").strip()
     quantity = int(arguments.get("quantity") or 1)
     pallet_id = str(arguments.get("pallet_id") or arguments.get("palletId") or f"{order_id}-PALLET").strip()
-    agv_id = str(arguments.get("agv_id") or arguments.get("agvId") or "AGV-001").strip()
+    agv_id = str(arguments.get("agv_id") or arguments.get("agvId") or "DEV005").strip()
 
     if not order_id:
         raise ValueError("缺少 order_id")
@@ -1902,55 +2070,12 @@ def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
                 next_step=next_step,
             )
             work_order["process_name"] = process_name
-            work_order["process_id"] = step.get("process_code") or step.get("processCode") or process.get("code") or step_id
+            work_order["process_id"] = process_code_for_step(step, process, step_id)
             work_order["grouped_step_count"] = len(grouped_steps)
             work_orders.append(work_order)
             if assigned_device:
                 last_device_order = work_order
             sequence += 1
-
-        labeling_assigned_device = labeling_device()
-        if last_device_order and device_changed(last_device_order.get("assigned_device"), labeling_assigned_device):
-            labeling_work_order_id = f"{order_id}-WO-{sequence + 1:03d}"
-            work_orders.append(
-                make_agv_transport_order(
-                    order_id=order_id,
-                    sequence=sequence,
-                    from_work_order=last_device_order,
-                    to_work_order_id=labeling_work_order_id,
-                    to_step={"step_id": "LABEL-001", "step_name": "产品贴标"},
-                    from_device=last_device_order["assigned_device"],
-                    to_device=labeling_assigned_device,
-                    product=product,
-                    quantity=quantity,
-                    pallet_id=pallet_id,
-                    agv_id=agv_id,
-                )
-            )
-            sequence += 1
-
-        work_orders.append(
-            make_work_order(
-                order_id=order_id,
-                sequence=sequence,
-                stage="贴标",
-                title="产品贴标",
-                content=f"对产品 {product.get('name')} 按订单 {order_id} 执行贴标，确认标签内容、数量 {quantity} 与产品状态一致。",
-                product=product,
-                quantity=quantity,
-                assigned_device=labeling_assigned_device,
-            )
-        )
-        work_orders[-1]["process_id"] = "LABEL-001"
-        work_orders[-1]["process_name"] = "产品贴标"
-        work_orders[-1]["label_codes"] = label_codes
-        work_orders[-1]["description"] = (
-            f"{work_orders[-1]['description']}\n"
-            f"成品标签编号：{', '.join(label_codes)}"
-        )
-        work_orders[-1]["content"] = work_orders[-1]["description"]
-        last_device_order = work_orders[-1]
-        sequence += 1
 
         quality_assigned_device = quality_device()
         if last_device_order and device_changed(last_device_order.get("assigned_device"), quality_assigned_device):
@@ -1989,6 +2114,49 @@ def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
         last_device_order = work_orders[-1]
         sequence += 1
 
+        labeling_assigned_device = labeling_device()
+        if last_device_order and device_changed(last_device_order.get("assigned_device"), labeling_assigned_device):
+            labeling_work_order_id = f"{order_id}-WO-{sequence + 1:03d}"
+            work_orders.append(
+                make_agv_transport_order(
+                    order_id=order_id,
+                    sequence=sequence,
+                    from_work_order=last_device_order,
+                    to_work_order_id=labeling_work_order_id,
+                    to_step={"step_id": "LABEL-001", "step_name": "产品贴标"},
+                    from_device=last_device_order["assigned_device"],
+                    to_device=labeling_assigned_device,
+                    product=product,
+                    quantity=quantity,
+                    pallet_id=pallet_id,
+                    agv_id=agv_id,
+                )
+            )
+            sequence += 1
+
+        work_orders.append(
+            make_work_order(
+                order_id=order_id,
+                sequence=sequence,
+                stage="贴标",
+                title="产品贴标",
+                content=f"对质检后的产品 {product.get('name')} 按订单 {order_id} 执行贴标，确认标签内容、数量 {quantity} 与产品状态一致。",
+                product=product,
+                quantity=quantity,
+                assigned_device=labeling_assigned_device,
+            )
+        )
+        work_orders[-1]["process_id"] = "LABEL-001"
+        work_orders[-1]["process_name"] = "产品贴标"
+        work_orders[-1]["label_codes"] = label_codes
+        work_orders[-1]["description"] = (
+            f"{work_orders[-1]['description']}\n"
+            f"成品标签编号：{', '.join(label_codes)}"
+        )
+        work_orders[-1]["content"] = work_orders[-1]["description"]
+        last_device_order = work_orders[-1]
+        sequence += 1
+
         inbound_assigned_device = warehouse_device()
         if last_device_order and device_changed(last_device_order.get("assigned_device"), inbound_assigned_device):
             inbound_work_order_id = f"{order_id}-WO-{sequence + 1:03d}"
@@ -2015,7 +2183,7 @@ def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
                 sequence=sequence,
                 stage="入库",
                 title="成品入库",
-                content=f"质检合格后，将产品 {product.get('name')} 按订单 {order_id} 办理成品入库。",
+                content=f"贴标完成后，将产品 {product.get('name')} 按订单 {order_id} 办理成品入库。",
                 product=product,
                 quantity=quantity,
                 assigned_device=inbound_assigned_device,
@@ -2034,7 +2202,7 @@ def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
 
         result = {
             "success": True,
-            "message": "产品订单已按 出库-加工-贴标-质检-入库 流程创建并提交调度。",
+            "message": "产品订单已按 出库-加工-质检-贴标-入库 流程创建并提交调度。",
             "order_id": order_id,
             "product": {key: value for key, value in product.items() if key != "_node_id"},
             "quantity": quantity,
@@ -2042,7 +2210,7 @@ def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
             "pallet_id": pallet_id,
             "route_step_count": len(route_steps),
             "process_work_order_count": len(route_step_groups),
-            "workstation_source": "mysql:device.workstation",
+            "workstation_source": "mysql:device.devices",
             "workstation_count": len(workstations),
             "agv_transport_count": sum(1 for item in work_orders if item.get("task_type") == "agv_transport"),
             "work_order_count": len(work_orders),
@@ -2067,7 +2235,7 @@ async def list_tools() -> list[Tool]:
             name="split_product_order",
             description=(
                 "固定生产入口。创建或更新订单，读取 Neo4j 产品/BOM/工艺路线，从 MySQL store.materials 分配库存物料，"
-                "按出库-加工-贴标-质检-入库生成工单并写入 MySQL order.work_orders，最后提交后台调度队列。"
+                "按出库-加工-质检-贴标-入库生成工单并写入 MySQL order.work_orders，最后提交后台调度队列。"
             ),
             inputSchema={
                 "type": "object",
@@ -2095,7 +2263,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "agv_id": {
                         "type": "string",
-                        "description": "执行运输任务的 AGV 编号，可选；默认 AGV-001。",
+                        "description": "执行运输任务的 AGV 设备编号，可选；默认 DEV005。",
                     },
                     "materials": {
                         "type": "array",

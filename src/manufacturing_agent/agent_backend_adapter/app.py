@@ -154,6 +154,7 @@ async def digital_twin_devices() -> JSONResponse:
     try:
         config = ENTITY_CONFIG["device"]
         tables = read_mysql_tables(config["database"], config["include_keywords"], config["exclude_keywords"])
+        tables = [table for table in tables if str(table.get("name") or "").lower() == "devices"]
         return JSONResponse({"ok": True, "database": config["database"], "tables": tables})
     except Exception as exc:
         return JSONResponse({"ok": False, "database": "device", "error": str(exc), "tables": []})

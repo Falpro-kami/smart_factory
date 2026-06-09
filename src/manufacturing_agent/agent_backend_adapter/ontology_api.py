@@ -25,7 +25,7 @@ ENTITY_CONFIG: dict[str, dict[str, Any]] = {
         "database": "device",
         "include_keywords": ("device", "workstation", "station", "agv"),
         "exclude_keywords": (),
-        "id_keys": ("设备ID", "设备编号", "AGV编号", "工站编号", "工作站编号", "device_id", "deviceId", "deviceCode", "device_code", "workstation_id", "workstationId", "station_id", "stationId", "agv_id", "agvId", "code", "id"),
+        "id_keys": ("设备ID", "设备编号", "AGV编号", "工站编号", "工作站编号", "device_id", "deviceId", "deviceCode", "device_code", "workstation_id", "workstationId", "station_id", "stationId", "agv_id", "agvId", "code"),
         "label_keys": ("设备名称", "设备名", "AGV名称", "小车名称", "工站名称", "工作站名称", "device_name", "deviceName", "workstation_name", "workstationName", "station_name", "stationName", "agv_name", "agvName", "name"),
         "subtitle_keys": ("设备编号", "设备类型", "类型", "device_code", "deviceCode", "workstation_code", "workstationCode", "station_code", "stationCode", "agv_code", "agvCode", "code", "type", "device_type", "deviceType"),
         "status_keys": ("运行状态", "设备状态", "启动状态", "状态", "工单状态", "订单状态", "运输状态", "任务状态", "status", "state", "runtime_status", "runtimeStatus", "work_status", "workStatus", "transport_status", "transportStatus"),
@@ -59,7 +59,11 @@ ENTITY_CONFIG: dict[str, dict[str, Any]] = {
     },
 }
 
-DEVICE_RUNTIME_TABLE = "device_event_runtime"
+DEVICE_RUNTIME_TABLE = "devices"
+DEVICE_ID_ALIASES = {
+    "dev005": ("agv-001",),
+    "agv-001": ("dev005",),
+}
 
 NEO4J_CANONICAL_LABELS = [
     "Class",
@@ -150,6 +154,32 @@ def first_present(data: dict[str, Any], keys: tuple[str, ...] | list[str]) -> An
     return None
 
 
+def table_columns(cursor: Any, table_name: str) -> set[str]:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+        """,
+        (table_name,),
+    )
+    return {str(row.get("COLUMN_NAME") or "") for row in cursor.fetchall()}
+
+
+def safe_column_name(name: str) -> str:
+    if not re.fullmatch(r"[\w\u4e00-\u9fff]+", name):
+        raise ValueError(f"unsafe column name: {name}")
+    return f"`{name}`"
+
+
+def order_id_column(cursor: Any) -> str:
+    columns = table_columns(cursor, "orders")
+    for candidate in ("订单编号", "订单ID", "order_id", "orderId", "id"):
+        if candidate in columns:
+            return candidate
+    return "订单编号"
+
+
 def mysql_connection(database: str):
     return pymysql.connect(
         host=os.environ.get("MYSQL_HOST", "localhost"),
@@ -175,7 +205,6 @@ def mysql_server_connection():
 
 
 DATA_DATABASE = os.environ.get("MYSQL_DATA_DATABASE", "Data")
-AGV_DATABASE = os.environ.get("MYSQL_AGV_DATABASE", "AGV")
 
 
 DATA_SCHEMA_SQL = [
@@ -466,42 +495,19 @@ def ensure_data_schema() -> None:
             order_history_columns = {str(row.get("COLUMN_NAME") or "") for row in cursor.fetchall()}
             if "description" not in order_history_columns:
                 cursor.execute("ALTER TABLE order_work_order_history ADD COLUMN description VARCHAR(255) DEFAULT ''")
+            try:
+                cursor.execute(
+                    "ALTER TABLE device_run_history "
+                    "MODIFY run_status ENUM('已创建','已下发','已接收','执行中','已完成','失败') "
+                    "NOT NULL DEFAULT '已完成'"
+                )
+            except Exception:
+                pass
             for table_name, statement in DATA_SAMPLE_SQL:
                 cursor.execute(f"SELECT COUNT(*) AS count FROM `{table_name}`")
                 count = int((cursor.fetchone() or {}).get("count") or 0)
                 if count == 0:
                     cursor.execute(statement)
-        conn.commit()
-
-
-def ensure_agv_schema() -> None:
-    database = AGV_DATABASE.replace("`", "``")
-    with mysql_server_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-    with mysql_connection(AGV_DATABASE) as conn:
-        with conn.cursor() as cursor:
-            for statement in AGV_SCHEMA_SQL:
-                cursor.execute(statement)
-            cursor.execute(
-                """
-                DELETE FROM `tasks`
-                WHERE `运输编号` IN (
-                    'AGV-TR-20260514-001',
-                    'AGV-TR-20260514-002',
-                    'AGV-TR-20260514-003'
-                )
-                """
-            )
-            cursor.execute("SELECT COUNT(*) AS count FROM `tasks`")
-            count = int((cursor.fetchone() or {}).get("count") or 0)
-            if count == 0:
-                try:
-                    ensure_data_schema()
-                    insert_agv_task_seed_rows(cursor, build_agv_task_seed_rows(read_mysql_table(DATA_DATABASE, "order_work_order_history", limit=200)))
-                except Exception:
-                    for _, statement in AGV_SAMPLE_SQL:
-                        cursor.execute(statement)
         conn.commit()
 
 
@@ -518,9 +524,263 @@ def read_reasoning_results(limit: int = 50) -> list[dict[str, Any]]:
             return [json_safe_row(row) for row in cursor.fetchall()]
 
 
+def mysql_table_rows(database: str, table_name: str, limit: int = 500) -> list[dict[str, Any]]:
+    with mysql_connection(database) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(f"SELECT * FROM `{table_name.replace('`', '``')}` LIMIT %s", (limit,))
+            return [json_safe_row(row) for row in cursor.fetchall()]
+
+
+def sync_archived_order_history_from_mysql(limit: int = 500) -> int:
+    ensure_data_schema()
+    try:
+        with mysql_connection("order") as conn:
+            with conn.cursor() as cursor:
+                order_col = safe_column_name(order_id_column(cursor))
+                cursor.execute(f"SELECT * FROM `orders` ORDER BY {order_col} LIMIT %s", (limit,))
+                order_rows = [json_safe_row(row) for row in cursor.fetchall()]
+                cursor.execute("SELECT * FROM `work_orders` LIMIT %s", (limit,))
+                work_order_rows = [json_safe_row(row) for row in cursor.fetchall()]
+    except Exception:
+        return 0
+
+    archived_orders: dict[str, dict[str, Any]] = {}
+    for row in order_rows:
+        status = first_present(row, ("订单状态", "status", "state"))
+        if not is_archived_order_status(status):
+            continue
+        order_id = str(first_present(row, ("订单编号", "订单ID", "order_id", "orderId", "id")) or "")
+        if order_id:
+            archived_orders[order_id] = row
+
+    work_orders_by_order: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for work_order in work_order_rows:
+        order_id = str(first_present(work_order, ("所属订单号", "所属订单", "所属订单编号", "订单编号", "订单ID", "source_order_id", "order_id", "orderId")) or "")
+        if order_id:
+            work_orders_by_order[order_id].append(work_order)
+
+    incomplete_order_ids = [
+        order_id
+        for order_id, related_work_orders in work_orders_by_order.items()
+        if related_work_orders
+        and any(
+            not is_archived_order_status(first_present(work_order, ("工单状态", "任务状态", "status", "state")))
+            for work_order in related_work_orders
+        )
+    ]
+    if incomplete_order_ids:
+        with mysql_connection(DATA_DATABASE) as conn:
+            with conn.cursor() as cursor:
+                placeholders = ",".join(["%s"] * len(incomplete_order_ids))
+                cursor.execute(f"DELETE FROM `order_work_order_history` WHERE order_id IN ({placeholders})", tuple(incomplete_order_ids))
+            conn.commit()
+
+    if not archived_orders:
+        return 0
+
+    archived_orders = {
+        order_id: order
+        for order_id, order in archived_orders.items()
+        if work_orders_by_order.get(order_id)
+        and all(
+            is_archived_order_status(first_present(work_order, ("工单状态", "任务状态", "status", "state")))
+            for work_order in work_orders_by_order[order_id]
+        )
+    }
+    if not archived_orders:
+        return 0
+
+    history_rows: list[dict[str, Any]] = []
+    for order_id, related_work_orders in work_orders_by_order.items():
+        order = archived_orders.get(order_id)
+        if not order:
+            continue
+        for work_order in related_work_orders:
+            work_order_id = str(first_present(work_order, ("工单ID", "工单编号", "任务编号", "work_order_id", "workOrderId", "id")) or "")
+            if not work_order_id:
+                continue
+            history_rows.append(
+                {
+                    "order_id": order_id,
+                    "order_name": str(first_present(order, ("订单名称", "订单编号", "订单ID", "order_name", "orderName")) or order_id),
+                    "product_id": str(first_present(order, ("产品ID", "产品编号", "product_id", "productId")) or ""),
+                    "product_name": str(first_present(order, ("产品名称", "product_name", "productName")) or ""),
+                    "customer_name": str(first_present(order, ("客户名称", "客户", "customer_name", "customerName")) or ""),
+                    "order_status": str(first_present(order, ("订单状态", "status", "state")) or "已完成"),
+                    "order_start_time": first_present(order, ("订单创建时间", "开始时间", "创建时间", "order_start_time", "created_at")) or datetime.now(),
+                    "order_end_time": first_present(order, ("完结时间", "订单结束时间", "结束时间", "order_end_time", "ended_at")) or datetime.now(),
+                    "work_order_id": work_order_id,
+                    "work_order_name": str(first_present(work_order, ("工单名称", "任务名称", "work_order_name", "workOrderName")) or work_order_id),
+                    "process_name": str(first_present(work_order, ("工单类型", "工序名称", "工序编号", "process_name", "processName")) or ""),
+                    "assigned_device_id": str(first_present(work_order, ("分配工站", "设备编号", "device_id", "deviceId")) or ""),
+                    "assigned_device_name": str(first_present(work_order, ("分配工站", "设备名称", "device_name", "deviceName")) or ""),
+                    "work_order_status": str(first_present(work_order, ("工单状态", "任务状态", "status", "state")) or "已完成"),
+                    "work_order_start_time": first_present(work_order, ("开始时间", "创建时间", "work_order_start_time", "started_at", "created_at")) or datetime.now(),
+                    "work_order_end_time": first_present(work_order, ("结束时间", "work_order_end_time", "ended_at")) or datetime.now(),
+                    "material_batch_ids": str(first_present(work_order, ("material_batch_ids", "物料批次", "物料批次号")) or ""),
+                    "description": str(first_present(work_order, ("description", "备注", "remark")) or ""),
+                }
+            )
+    if not history_rows:
+        return 0
+
+    with mysql_connection(DATA_DATABASE) as conn:
+        with conn.cursor() as cursor:
+            affected_order_ids = sorted({row["order_id"] for row in history_rows})
+            placeholders = ",".join(["%s"] * len(affected_order_ids))
+            cursor.execute(f"DELETE FROM `order_work_order_history` WHERE order_id IN ({placeholders})", tuple(affected_order_ids))
+            cursor.executemany(
+                """
+                INSERT INTO order_work_order_history (
+                    order_id, order_name, product_id, product_name, customer_name, order_status,
+                    order_start_time, order_end_time, work_order_id, work_order_name, process_name,
+                    assigned_device_id, assigned_device_name, work_order_status,
+                    work_order_start_time, work_order_end_time, material_batch_ids, description
+                ) VALUES (
+                    %(order_id)s, %(order_name)s, %(product_id)s, %(product_name)s, %(customer_name)s, %(order_status)s,
+                    %(order_start_time)s, %(order_end_time)s, %(work_order_id)s, %(work_order_name)s, %(process_name)s,
+                    %(assigned_device_id)s, %(assigned_device_name)s, %(work_order_status)s,
+                    %(work_order_start_time)s, %(work_order_end_time)s, %(material_batch_ids)s, %(description)s
+                )
+                """,
+                history_rows,
+            )
+        conn.commit()
+    return len(history_rows)
+
+
+def sync_device_run_history_from_mysql(limit: int = 500) -> int:
+    ensure_data_schema()
+    try:
+        work_order_rows = mysql_table_rows("order", "work_orders", limit=limit)
+    except Exception:
+        return 0
+
+    rows: list[dict[str, Any]] = []
+    for work_order in work_order_rows:
+        status = str(first_present(work_order, ("工单状态", "任务状态", "status", "state")) or "")
+        if not is_archived_order_status(status):
+            continue
+        work_order_id = str(first_present(work_order, ("工单ID", "工单编号", "任务编号", "work_order_id", "workOrderId", "id")) or "")
+        device_id = str(first_present(work_order, ("分配工站", "设备编号", "device_id", "deviceId")) or "")
+        if not work_order_id or not device_id:
+            continue
+        work_order_type = str(first_present(work_order, ("工单类型", "任务类型", "工序编号", "process_id")) or "")
+        run_status = "失败" if ("失败" in status or "取消" in status or "fail" in status.lower() or "cancel" in status.lower()) else "已完成"
+        rows.append(
+            {
+                "device_id": device_id,
+                "device_name": str(first_present(work_order, ("分配工站", "设备名称", "device_name", "deviceName")) or device_id),
+                "device_type": "AGV" if "agv" in work_order_type.lower() else "Workstation",
+                "work_order_id": work_order_id,
+                "work_order_name": str(first_present(work_order, ("工单名称", "任务名称", "work_order_name", "workOrderName")) or work_order_id),
+                "run_start_time": first_present(work_order, ("开始时间", "创建时间", "started_at", "created_at")) or datetime.now(),
+                "run_end_time": first_present(work_order, ("结束时间", "ended_at")) or datetime.now(),
+                "run_status": run_status,
+                "avg_load_percent": 0,
+                "peak_load_percent": 0,
+                "load_curve_json": json.dumps([], ensure_ascii=False),
+                "operator_name": "",
+                "remark": str(first_present(work_order, ("description", "备注", "remark")) or ""),
+            }
+        )
+
+    if not rows:
+        return 0
+
+    with mysql_connection(DATA_DATABASE) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT device_id, work_order_id FROM `device_run_history`")
+            existing = {
+                (str(row.get("device_id") or ""), str(row.get("work_order_id") or ""))
+                for row in cursor.fetchall()
+            }
+            new_rows = [row for row in rows if (row["device_id"], row["work_order_id"]) not in existing]
+            if not new_rows:
+                return 0
+            cursor.executemany(
+                """
+                INSERT INTO device_run_history (
+                    device_id, device_name, device_type, work_order_id, work_order_name,
+                    run_start_time, run_end_time, run_status, avg_load_percent, peak_load_percent,
+                    load_curve_json, operator_name, remark
+                ) VALUES (
+                    %(device_id)s, %(device_name)s, %(device_type)s, %(work_order_id)s, %(work_order_name)s,
+                    %(run_start_time)s, %(run_end_time)s, %(run_status)s, %(avg_load_percent)s, %(peak_load_percent)s,
+                    %(load_curve_json)s, %(operator_name)s, %(remark)s
+                )
+                """,
+                new_rows,
+            )
+        conn.commit()
+    return len(new_rows)
+
+
+def sync_data_history_from_mysql() -> dict[str, int]:
+    return {
+        "orderHistorySynced": sync_archived_order_history_from_mysql(),
+        "deviceHistorySynced": sync_device_run_history_from_mysql(),
+    }
+
+
 def read_agv_tasks(limit: int = 200) -> list[dict[str, Any]]:
-    ensure_agv_schema()
-    return read_mysql_table(AGV_DATABASE, "tasks", limit=limit)
+    rows = read_mysql_table("order", "work_orders", limit=limit)
+    tasks: list[dict[str, Any]] = []
+    for row in rows:
+        work_order_type = str(row.get("工单类型") or row.get("task_type") or "")
+        process_id = str(row.get("工序编号") or row.get("process_id") or "")
+        if "AGV" not in work_order_type.upper() and "AGV" not in process_id.upper():
+            continue
+        description = str(row.get("description") or "")
+        transport_payload: dict[str, Any] = {}
+        marker = "TRANSPORT_TASK_JSON:"
+        if marker in description:
+            payload_text = description.rsplit(marker, 1)[1].strip()
+            try:
+                transport_payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                transport_payload = {}
+        source_device = transport_payload.get("source_device") if isinstance(transport_payload.get("source_device"), dict) else {}
+        target_device = transport_payload.get("target_device") if isinstance(transport_payload.get("target_device"), dict) else {}
+        source_station = str(
+            row.get("起始工站")
+            or source_device.get("device_name")
+            or source_device.get("workstation_name")
+            or source_device.get("device_id")
+            or ""
+        )
+        target_station = str(
+            row.get("目标工站")
+            or target_device.get("device_name")
+            or target_device.get("workstation_name")
+            or target_device.get("device_id")
+            or ""
+        )
+        status = str(row.get("工单状态") or "")
+        if status in {"已下发", "已接收", "执行中"}:
+            task_status = "运输中"
+        elif status == "已完成":
+            task_status = "已完成"
+        elif status == "失败":
+            task_status = "失败"
+        else:
+            task_status = "等待中"
+        task = {
+            **row,
+            "运输编号": str(row.get("工单ID") or transport_payload.get("transport_task_id") or ""),
+            "任务类型": "AGV运输",
+            "任务状态": task_status,
+            "起始工站/仓库": source_station,
+            "目标工站/仓库": target_station,
+            "创建时间": row.get("创建时间"),
+            "实际开始时间": row.get("开始时间"),
+            "结束时间": row.get("结束时间"),
+            "AGV编号": str(row.get("分配工站") or transport_payload.get("agv_id") or ""),
+            "订单编号": str(row.get("所属订单号") or ""),
+            "工单编号": str(row.get("工单ID") or ""),
+        }
+        tasks.append(task)
+    return tasks
 
 
 def is_archived_order_status(value: Any) -> bool:
@@ -575,15 +835,18 @@ def build_order_history_tree(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
 def safe_device_catalog() -> list[dict[str, Any]]:
     catalogs: list[dict[str, Any]] = []
     try:
-        catalogs.extend(merge_device_runtime_status(build_mysql_catalog("device", limit=200)))
+        catalogs.extend(build_mysql_catalog("device", limit=200))
     except Exception:
         pass
-    try:
-        catalogs.extend(build_neo4j_catalog("device", limit=100))
-    except Exception:
-        pass
-
-    return merge_device_catalog_items(catalogs)
+    production_devices = [
+        item
+        for item in catalogs
+        if any(
+            str(source).lower().endswith(".devices")
+            for source in (item.get("source") or [])
+        )
+    ]
+    return merge_device_runtime_status(production_devices)
 
 
 def production_device_sort_key(item: dict[str, Any]) -> tuple[int, str]:
@@ -682,8 +945,6 @@ def merge_device_catalog_items(items: list[dict[str, Any]]) -> list[dict[str, An
             ),
             None,
         )
-        if match_index is None and coded_production_indexes:
-            match_index = coded_production_indexes.pop(0)
         if match_index is None:
             merged.append(item)
         else:
@@ -729,6 +990,7 @@ def persist_reasoning_result(inference: dict[str, Any], *, trigger_source: str =
 
 
 def get_data_payload() -> dict[str, Any]:
+    sync_summary = sync_data_history_from_mysql()
     order_rows = read_data_table("order_work_order_history")
     archived_order_rows = archived_order_history_rows(order_rows)
     raw_device_rows = read_data_table("device_run_history")
@@ -775,6 +1037,7 @@ def get_data_payload() -> dict[str, Any]:
             "invalidDeviceRunCount": len(invalid_device_rows),
             "qualityTraceCount": len(quality_rows),
             "agvTaskCount": len(agv_task_rows),
+            **sync_summary,
         },
         "inference": inference,
         "persistedReasoning": persisted_reasoning,
@@ -786,8 +1049,8 @@ def get_agv_tasks_payload() -> dict[str, Any]:
     tasks = read_agv_tasks()
     return {
         "ok": True,
-        "database": AGV_DATABASE,
-        "table": "tasks",
+        "database": "order",
+        "table": "work_orders",
         "tasks": tasks,
         "summary": {
             "total": len(tasks),
@@ -1024,6 +1287,8 @@ def build_mysql_catalog(entity_type: str, limit: int = 50) -> list[dict[str, Any
         config["exclude_keywords"],
         limit=limit,
     )
+    if entity_type == "device":
+        tables = [table for table in tables if str(table.get("name") or "").lower() == "devices"]
     items: list[dict[str, Any]] = []
     for table in tables:
         for index, row in enumerate(table["rows"]):
@@ -1045,16 +1310,16 @@ def read_device_runtime_status(limit: int = 200) -> list[dict[str, Any]]:
                 cursor.execute(
                     """
                     SELECT
-                        device_id,
-                        device_name,
-                        connection_state,
-                        status,
-                        previous_status,
-                        last_seen_at,
-                        last_heartbeat_at,
-                        updated_at
-                    FROM device_event_runtime
-                    ORDER BY updated_at DESC
+                        `设备编号` AS device_id,
+                        `设备名称` AS device_name,
+                        `连接状态` AS connection_state,
+                        `运行状态` AS status,
+                        '' AS previous_status,
+                        `更新时间` AS last_seen_at,
+                        `更新时间` AS last_heartbeat_at,
+                        `更新时间` AS updated_at
+                    FROM devices
+                    ORDER BY `更新时间` DESC
                     LIMIT %s
                     """,
                     (limit,),
@@ -1143,7 +1408,9 @@ def device_runtime_keys(runtime: dict[str, Any]) -> set[str]:
     for key in ("device_id", "device_name"):
         value = runtime.get(key)
         if value not in (None, ""):
-            keys.add(normalize_text(value))
+            normalized = normalize_text(value)
+            keys.add(normalized)
+            keys.update(DEVICE_ID_ALIASES.get(normalized, ()))
     return keys
 
 
@@ -1159,9 +1426,13 @@ def item_device_keys(item: dict[str, Any]) -> set[str]:
     ):
         if value not in (None, ""):
             text = str(value)
-            keys.add(normalize_text(text))
+            normalized = normalize_text(text)
+            keys.add(normalized)
+            keys.update(DEVICE_ID_ALIASES.get(normalized, ()))
             if ":" in text:
-                keys.add(normalize_text(text.split(":", 1)[1]))
+                suffix = normalize_text(text.split(":", 1)[1])
+                keys.add(suffix)
+                keys.update(DEVICE_ID_ALIASES.get(suffix, ()))
     return keys
 
 
@@ -1171,7 +1442,7 @@ def is_device_runtime_catalog_item(item: dict[str, Any]) -> bool:
         sources = [sources]
     source_text = " ".join(str(source) for source in sources)
     subtitle = str(item.get("subtitle") or "")
-    return DEVICE_RUNTIME_TABLE in source_text or normalize_text(subtitle) == normalize_text(DEVICE_RUNTIME_TABLE)
+    return "device_event_runtime" in source_text or normalize_text(subtitle) == normalize_text("device_event_runtime")
 
 
 def merge_device_runtime_status(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1205,7 +1476,7 @@ def merge_device_runtime_status(devices: list[dict[str, Any]]) -> list[dict[str,
                     "summary": " / ".join(part for part in (display_status, display_code or str(item.get("subtitle") or "")) if part),
                     "properties": properties,
                     "runtime": {**(item.get("runtime") or {}), **runtime_fields, **runtime_state, "status": display_status},
-                    "source": list(dict.fromkeys([*(item.get("source") or []), "mysql:device.device_event_runtime"])),
+                    "source": list(dict.fromkeys([*(item.get("source") or []), "mysql:device.devices"])),
                 }
             )
             matched_keys.update(device_runtime_keys(runtime))
@@ -1229,7 +1500,7 @@ def merge_device_runtime_status(devices: list[dict[str, Any]]) -> list[dict[str,
                 "subtitle": device_id or DEVICE_RUNTIME_TABLE,
                 "status": display_status,
                 "summary": display_status,
-                "source": ["mysql:device.device_event_runtime"],
+                "source": ["mysql:device.devices"],
                 "properties": {**runtime, **runtime_state, "status": display_status},
                 "runtime": {**runtime, **runtime_state, "status": display_status},
                 "relations": [],

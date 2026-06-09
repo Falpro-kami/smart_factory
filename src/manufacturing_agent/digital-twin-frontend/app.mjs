@@ -445,13 +445,20 @@ function mysqlCatalogItem(entityType, row, index) {
 function deviceCatalogIdentity(row, index) {
   const subtype = deviceSubtype(row);
   if (subtype === "agv") {
-    return firstField(row, ["AGV编号", "agv_id", "agvId", "小车编号", "vehicle_id", "vehicleId", "transport_device_id", "id", "code"], `${row.__table}:${index}`);
+    return firstField(row, ["AGV编号", "agv_id", "agvId", "小车编号", "vehicle_id", "vehicleId", "transport_device_id", "code"], `${row.__table}:${index}`);
   }
-  return firstField(row, ["设备编号", "设备ID", "deviceCode", "device_code", "device_id", "deviceId", "workstation_id", "workstationId", "station_id", "stationId", "code", "id"], `${row.__table}:${index}`);
+  return firstField(row, ["设备编号", "设备ID", "deviceCode", "device_code", "device_id", "deviceId", "workstation_id", "workstationId", "station_id", "stationId", "code"], `${row.__table}:${index}`);
 }
 
 function replaceCatalogItems(entityType, items) {
   state.catalogs[entityType] = Array.isArray(items) ? items : [];
+}
+
+function deviceRowsFromMysql() {
+  return flattenRows(state.devices.tables).filter((row) => {
+    const table = normalizeText(row.__table || "");
+    return table === "devices" || table === "agv" || table === "workstation";
+  });
 }
 
 function mergeCatalogItems(entityType, items) {
@@ -469,7 +476,7 @@ function mergeCatalogItems(entityType, items) {
 }
 
 function syncCatalogsFromTables() {
-  replaceCatalogItems("device", flattenRows(state.devices.tables).map((row, index) => mysqlCatalogItem("device", row, index)));
+  replaceCatalogItems("device", deviceRowsFromMysql().map((row, index) => mysqlCatalogItem("device", row, index)));
   replaceCatalogItems("material", flattenRows(state.store.tables).map((row, index) => mysqlCatalogItem("material", row, index)));
 }
 
@@ -482,6 +489,7 @@ async function refreshEntityCatalogs() {
   results.forEach((result, index) => {
     if (result.status !== "fulfilled" || !result.value?.ok) return;
     const entityType = entityTypes[index];
+    if (entityType === "device") return;
     const items = Array.isArray(result.value.items) ? result.value.items : [];
     replaceCatalogItems(entityType, items);
   });
@@ -914,7 +922,7 @@ function connectDigitalTwinEvents() {
     if (!event.data) return;
     try {
       const payload = JSON.parse(event.data);
-      if (payload.type === "work_order_status_changed" || payload.type === "device_status_changed") {
+      if (payload.type && payload.type !== "connected") {
         scheduleLiveEventRefresh();
       }
     } catch {
@@ -2938,7 +2946,7 @@ function buildDataOrderTreeItems() {
 function buildOntologyOrderTreeItems() {
   const orders = uniqueEntityItems("order", entityItems("order"));
   const workOrders = uniqueEntityItems("work_order", entityItems("work_order"));
-  return orders.filter(isActiveOntologyOrder).map((order, index) => {
+  return orders.map((order, index) => {
     const orderId = orderIdentity(order, `order-${index + 1}`);
     const orderKeys = new Set([
       orderId,
@@ -2946,15 +2954,18 @@ function buildOntologyOrderTreeItems() {
       recordField(order, ["订单名称", "order_name", "orderName", "name"], ""),
       recordField(order, ["订单ID", "order_id", "orderId"], ""),
     ].filter(Boolean));
+    const relatedWorkOrders = workOrders.filter((workOrder) => catalogWorkOrderMatchesOrder(workOrder, orderKeys));
+    const hasActiveWorkOrder = relatedWorkOrders.some(isActiveOntologyWorkOrder);
+    if (!isActiveOntologyOrder(order) && !hasActiveWorkOrder) return null;
     return normalizeOrderTreeItem(
       {
         ...order,
-        work_orders: workOrders.filter((workOrder) => catalogWorkOrderMatchesOrder(workOrder, orderKeys)),
+        work_orders: relatedWorkOrders,
       },
       index,
       "ontology"
     );
-  });
+  }).filter(Boolean);
 }
 
 function buildOrderTreeItems(source = "ontology") {
@@ -3105,13 +3116,13 @@ function deviceTransportTaskForRecord(record, workOrders) {
 }
 
 function buildDeviceTaskTreeItems(deviceItems) {
-  const normalizedDeviceItems = mergeDeviceEntityItems(deviceItems);
+  const normalizedDeviceItems = deviceItems;
   const workOrders = uniqueEntityItems("work_order", entityItems("work_order"))
     .filter(isActiveOntologyWorkOrder)
     .map((item) => ({ ...item.properties, ...item.runtime, ...item, __table: Array.isArray(item.source) ? item.source.join(" / ") : item.source }));
   const transportRows = [
     ...workOrders,
-    ...activeAgvTaskRows().map((row) => ({ ...row, __table: "AGV.tasks" })),
+    ...activeAgvTaskRows().map((row) => ({ ...row, __table: "order.work_orders" })),
   ];
 
   return normalizedDeviceItems.map((item, index) => {
@@ -3266,7 +3277,7 @@ function mergeDeviceEntityItems(items) {
           && candidate.titleKey
           && (device.titleKey.includes(candidate.titleKey) || candidate.titleKey.includes(device.titleKey))
         )
-      )) || orderedCodedProductionDevices[index];
+      ));
       if (matched?.key) autoAliases.set(device.key, matched.key);
     });
 
@@ -3313,7 +3324,7 @@ function mergeDeviceEntityItems(items) {
 
 function renderEntityListPage(entityType) {
   const baseItems = uniqueEntityItems(entityType, entityItems(entityType));
-  const allItems = entityType === "device" ? mergeDeviceEntityItems(baseItems) : baseItems;
+  const allItems = baseItems;
   const items = filterItems(allItems, state.ontologySearch[entityType]);
   const title = ENTITY_META[entityType].title;
   const emptyMessage = entityType === "order" || entityType === "work_order" ? "暂无订单或工单数据" : "暂无实时数据";
@@ -3486,7 +3497,7 @@ function renderAgvTransportTaskView() {
               <span>结束时间</span><strong>${escapeHtml(displayValue(task.endedAt))}</strong>
             </div>
           </article>
-        `).join("") : "<article class='entity-card'><h3>暂无 AGV 运输任务</h3><p class='panel-muted'>AGV.tasks 表暂无任务记录。</p></article>"}
+        `).join("") : "<article class='entity-card'><h3>暂无 AGV 运输任务</h3><p class='panel-muted'>order.work_orders 暂无 AGV 运输工单。</p></article>"}
       </div>
     </div>
   `;
@@ -3554,7 +3565,7 @@ function archivedAgvTaskHistoryRows() {
     load_curve_json: [],
     transport_id: task.id,
     transport_route: `${task.from || "-"} -> ${task.to || "-"}`,
-    __historySource: "AGV.tasks",
+    __historySource: "order.work_orders",
   }));
 }
 
@@ -4720,10 +4731,8 @@ function autoDeviceStatusAliases(rows) {
 
 function mergeDeviceStatusList(rows) {
   const merged = new Map();
-  const autoAliases = autoDeviceStatusAliases(rows);
   rows.forEach((row, index) => {
-    const rawKey = canonicalDeviceStatusKey(row) || `row:${index}`;
-    const key = autoAliases.get(rawKey) || rawKey;
+    const key = normalizeDeviceStatusKey(deviceIdentity(row)) || `row:${index}`;
     const existing = merged.get(key);
     merged.set(key, existing ? mergeDeviceStatusRows(existing, row, key) : { ...row, device_id: canonicalDeviceStatusId(key) });
   });
@@ -4731,7 +4740,7 @@ function mergeDeviceStatusList(rows) {
 }
 
 function deviceIdentity(row) {
-  return firstField(row, ["设备编号", "AGV编号", "工站编号", "工作站编号", "deviceCode", "device_code", "device_id", "deviceId", "workstation_code", "workstationCode", "workstation_id", "workstationId", "station_code", "stationCode", "station_id", "stationId", "agv_id", "agvId", "code", "id"], "");
+  return firstField(row, ["设备编号", "AGV编号", "工站编号", "工作站编号", "deviceCode", "device_code", "device_id", "deviceId", "workstation_code", "workstationCode", "workstation_id", "workstationId", "station_code", "stationCode", "station_id", "stationId", "agv_id", "agvId", "code"], "");
 }
 
 function deviceTitle(row) {
@@ -4817,7 +4826,7 @@ function transportTaskInfo(row, options = {}) {
 }
 
 function renderDeviceStatusPage() {
-  const rows = mergeDeviceStatusList(flattenRows(state.devices.tables));
+  const rows = mergeDeviceStatusList(deviceRowsFromMysql());
   const workOrders = entityItems("work_order")
     .filter(isActiveOntologyWorkOrder)
     .map((item) => ({ ...item.properties, ...item.runtime, ...item, __table: Array.isArray(item.source) ? item.source.join(" / ") : item.source }));
@@ -4828,7 +4837,7 @@ function renderDeviceStatusPage() {
   });
   const agvRows = rows.filter(isAgvRow);
   const agvTasks = [
-    ...activeAgvTaskRows().map((row) => ({ ...row, __table: "AGV.tasks" })),
+    ...activeAgvTaskRows().map((row) => ({ ...row, __table: "order.work_orders" })),
     ...workOrders,
   ].map(transportTaskInfo).filter(Boolean);
   const onlineCount = rows.filter((row) => deviceConnectionState(row) === "online").length;

@@ -102,7 +102,7 @@ def ensure_order_status_schema(cursor: Any) -> None:
         print(f"order status schema sync skipped: {exc}", file=sys.stderr, flush=True)
 
 
-DEVICE_RUNTIME_TABLE = "device_event_runtime"
+DEVICE_RUNTIME_TABLE = "devices"
 DEVICE_ID_COLUMNS = (
     "device_id",
     "deviceId",
@@ -149,6 +149,7 @@ DEVICE_CONNECTION_COLUMNS = (
     "onlineState",
     "\u8fde\u63a5\u72b6\u6001",
     "\u5728\u7ebf\u72b6\u6001",
+    "\u542f\u52a8\u72b6\u6001",
 )
 DEVICE_TIME_COLUMNS = (
     "last_seen_at",
@@ -158,6 +159,17 @@ DEVICE_TIME_COLUMNS = (
     "\u66f4\u65b0\u65f6\u95f4",
     "\u6700\u540e\u5fc3\u8df3\u65f6\u95f4",
 )
+DEVICE_ID_ALIASES = {
+    "DEV005": ("AGV-001",),
+    "AGV-001": ("DEV005",),
+}
+DEVICE_DEFAULT_NAMES = {
+    "DEV001": "立体仓库",
+    "DEV002": "协作加工工作站",
+    "DEV003": "scara工作站1",
+    "DEV004": "scara工作站2",
+    "DEV005": "AGV小车",
+}
 
 
 def heartbeat_timeout_seconds() -> int:
@@ -225,26 +237,74 @@ def ensure_device_runtime_schema(cursor: Any) -> None:
     cursor.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {DEVICE_RUNTIME_TABLE} (
-            device_id VARCHAR(64) PRIMARY KEY,
-            device_name VARCHAR(128) DEFAULT '',
-            connection_state VARCHAR(32) NOT NULL DEFAULT 'offline',
-            status VARCHAR(32) NOT NULL DEFAULT 'idle',
-            previous_status VARCHAR(32) DEFAULT '',
-            last_seen_at DATETIME NOT NULL,
-            last_heartbeat_at DATETIME NULL,
-            updated_at DATETIME NOT NULL,
-            raw_event_json JSON NULL,
-            INDEX idx_device_runtime_status (status),
-            INDEX idx_device_runtime_heartbeat (last_heartbeat_at)
+            `设备编号` VARCHAR(50) PRIMARY KEY,
+            `设备名称` VARCHAR(100) NOT NULL,
+            `连接状态` VARCHAR(32) DEFAULT 'offline',
+            `运行状态` VARCHAR(32) DEFAULT '',
+            `执行工单编号` VARCHAR(50) DEFAULT NULL,
+            `工序编号` VARCHAR(50) DEFAULT NULL,
+            `当前任务开始时间` DATETIME NULL,
+            `更新时间` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `创建时间` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_devices_connection (`连接状态`),
+            INDEX idx_devices_status (`运行状态`),
+            INDEX idx_devices_work_order (`执行工单编号`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """
     )
     try:
         cursor.execute(
-            f"ALTER TABLE {DEVICE_RUNTIME_TABLE} MODIFY connection_state VARCHAR(32) NOT NULL DEFAULT 'offline'"
+            f"ALTER TABLE {DEVICE_RUNTIME_TABLE} MODIFY `连接状态` VARCHAR(32) DEFAULT 'offline'"
         )
     except Exception as exc:
         print(f"device runtime schema default sync skipped: {exc}", file=sys.stderr, flush=True)
+
+
+def ensure_device_state_columns_are_text(cursor: Any) -> None:
+    startup_column = "\u542f\u52a8\u72b6\u6001"
+    connection_column = "\u8fde\u63a5\u72b6\u6001"
+    for table_name in ("agv", "workstation"):
+        columns = table_columns(cursor, "device", table_name)
+        if startup_column in columns and connection_column not in columns:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE {safe_column_name(table_name)} CHANGE {safe_column_name(startup_column)} {safe_column_name(connection_column)} VARCHAR(32) DEFAULT 'offline'"
+                )
+                columns = table_columns(cursor, "device", table_name)
+            except Exception as exc:
+                print(
+                    f"device connection column rename skipped for {table_name}: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        if connection_column not in columns:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE {safe_column_name(table_name)} ADD {safe_column_name(connection_column)} VARCHAR(32) DEFAULT 'offline'"
+                )
+                columns = table_columns(cursor, "device", table_name)
+            except Exception as exc:
+                print(
+                    f"device connection column add skipped for {table_name}: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        column_types = table_column_types(cursor, "device", table_name)
+        for column in (*DEVICE_STATUS_COLUMNS, *DEVICE_CONNECTION_COLUMNS):
+            actual = column if column in columns else {item.lower(): item for item in columns}.get(column.lower())
+            if not actual:
+                continue
+            if is_numeric_mysql_type(column_types.get(actual, "")):
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {safe_column_name(table_name)} MODIFY {safe_column_name(actual)} VARCHAR(32) DEFAULT ''"
+                    )
+                except Exception as exc:
+                    print(
+                        f"device status column schema sync skipped for {table_name}.{actual}: {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
 
 def safe_column_name(name: str) -> str:
@@ -317,6 +377,10 @@ def is_numeric_text(value: str) -> bool:
     return bool(re.fullmatch(r"[+-]?\d+(?:\.\d+)?", value.strip()))
 
 
+def normalize_match_text(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
 def first_device_id_column(
     columns: set[str],
     column_types: dict[str, str],
@@ -331,6 +395,13 @@ def first_device_id_column(
             continue
         return actual
     return ""
+
+
+def device_id_values_for_table(device_id: str, table_name: str) -> tuple[str, ...]:
+    values = [device_id]
+    if table_name.lower() == "agv":
+        values.extend(DEVICE_ID_ALIASES.get(device_id, ()))
+    return tuple(dict.fromkeys(value for value in values if value))
 
 
 def sync_existing_device_tables(
@@ -372,13 +443,15 @@ def sync_existing_device_tables(
             values.append(event_time)
         if not assignments:
             continue
-        values.append(device_id)
+        id_values = device_id_values_for_table(device_id, table_name)
+        values.extend(id_values)
+        placeholders = ", ".join(["%s"] * len(id_values))
         try:
             cursor.execute(
                 f"""
                 UPDATE {safe_column_name(table_name)}
                 SET {", ".join(assignments)}
-                WHERE {safe_column_name(id_column)} = %s
+                WHERE {safe_column_name(id_column)} IN ({placeholders})
                 """,
                 tuple(values),
             )
@@ -390,6 +463,8 @@ def upsert_device_runtime(event: dict[str, Any], is_heartbeat: bool) -> None:
     device_id = extract_device_id(event)
     if not device_id:
         return
+    if device_id == "AGV-001":
+        device_id = "DEV005"
     event_time = parse_event_time(event.get("timestamp") or event.get("created_at"))
     default_connection = "online" if event.get("_device_agent_event") else "offline"
     connection_state = normalize_connection_state(
@@ -404,43 +479,34 @@ def upsert_device_runtime(event: dict[str, Any], is_heartbeat: bool) -> None:
     elif keep_existing_status:
         status = "idle"
     previous_status = normalize_device_status(event.get("previous_status") or event.get("previousStatus")) if event.get("previous_status") or event.get("previousStatus") else ""
-    device_name = extract_device_name(event)
+    device_name = extract_device_name(event) or DEVICE_DEFAULT_NAMES.get(device_id, "")
     raw_event_json = json.dumps(event, ensure_ascii=False)
 
     with mysql_connection("device") as conn:
         with conn.cursor() as cursor:
             ensure_device_runtime_schema(cursor)
+            ensure_device_state_columns_are_text(cursor)
             cursor.execute(
                 f"""
                 INSERT INTO {DEVICE_RUNTIME_TABLE} (
-                    device_id, device_name, connection_state, status, previous_status,
-                    last_seen_at, last_heartbeat_at, updated_at, raw_event_json
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    `设备编号`, `设备名称`, `连接状态`, `运行状态`, `更新时间`
+                ) VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
-                    device_name = CASE WHEN VALUES(device_name) <> '' THEN VALUES(device_name) ELSE device_name END,
-                    connection_state = VALUES(connection_state),
-                    status = CASE WHEN %s THEN status ELSE VALUES(status) END,
-                    previous_status = VALUES(previous_status),
-                    last_seen_at = VALUES(last_seen_at),
-                    last_heartbeat_at = CASE
-                        WHEN %s THEN VALUES(last_heartbeat_at)
-                        ELSE COALESCE(last_heartbeat_at, VALUES(last_seen_at))
+                    `设备名称` = CASE
+                        WHEN VALUES(`设备名称`) <> '' AND VALUES(`设备名称`) <> VALUES(`设备编号`) THEN VALUES(`设备名称`)
+                        ELSE `设备名称`
                     END,
-                    updated_at = VALUES(updated_at),
-                    raw_event_json = VALUES(raw_event_json)
+                    `连接状态` = VALUES(`连接状态`),
+                    `运行状态` = CASE WHEN %s THEN `运行状态` ELSE VALUES(`运行状态`) END,
+                    `更新时间` = VALUES(`更新时间`)
                 """,
                 (
                     device_id,
-                    device_name,
+                    device_name or device_id,
                     connection_state,
                     status,
-                    previous_status,
                     event_time,
-                    event_time if is_heartbeat else None,
-                    event_time,
-                    raw_event_json,
                     keep_existing_status,
-                    is_heartbeat,
                 ),
             )
             if not keep_existing_status:
@@ -466,10 +532,10 @@ def mark_stale_device_heartbeats() -> None:
             ensure_device_runtime_schema(cursor)
             cursor.execute(
                 f"""
-                SELECT device_id
+                SELECT `设备编号` AS device_id
                 FROM {DEVICE_RUNTIME_TABLE}
-                WHERE connection_state <> 'offline'
-                  AND TIMESTAMPDIFF(SECOND, COALESCE(last_heartbeat_at, updated_at), NOW()) >= %s
+                WHERE `连接状态` <> 'offline'
+                  AND TIMESTAMPDIFF(SECOND, `更新时间`, NOW()) >= %s
                 """,
                 (timeout_seconds,),
             )
@@ -477,11 +543,11 @@ def mark_stale_device_heartbeats() -> None:
             cursor.execute(
                 f"""
                 UPDATE {DEVICE_RUNTIME_TABLE}
-                SET connection_state = 'offline',
-                    status = '',
-                    updated_at = NOW()
-                WHERE connection_state <> 'offline'
-                  AND TIMESTAMPDIFF(SECOND, COALESCE(last_heartbeat_at, updated_at), NOW()) >= %s
+                SET `连接状态` = 'offline',
+                    `运行状态` = '',
+                    `更新时间` = NOW()
+                WHERE `连接状态` <> 'offline'
+                  AND TIMESTAMPDIFF(SECOND, `更新时间`, NOW()) >= %s
                 """,
                 (timeout_seconds,),
             )
@@ -533,7 +599,7 @@ def ensure_data_order_history_schema(cursor: Any) -> None:
             work_order_start_time DATETIME NOT NULL,
             work_order_end_time DATETIME NOT NULL,
             material_batch_ids VARCHAR(255) DEFAULT '',
-            description VARCHAR(255) DEFAULT '',
+            description TEXT,
             INDEX idx_order_history_order (order_id),
             INDEX idx_order_history_work_order (work_order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -548,7 +614,12 @@ def ensure_data_order_history_schema(cursor: Any) -> None:
     )
     columns = {str(row.get("COLUMN_NAME") or "") for row in cursor.fetchall()}
     if "description" not in columns:
-        cursor.execute("ALTER TABLE order_work_order_history ADD COLUMN description VARCHAR(255) DEFAULT ''")
+        cursor.execute("ALTER TABLE order_work_order_history ADD COLUMN description TEXT")
+    else:
+        try:
+            cursor.execute("ALTER TABLE order_work_order_history MODIFY description TEXT")
+        except Exception as exc:
+            print(f"history description schema sync skipped: {exc}", file=sys.stderr, flush=True)
 
 
 def fetch_order_rows_for_history(order_id: str) -> list[dict[str, Any]]:
@@ -608,6 +679,8 @@ def sync_archived_order_to_data(order_id: str) -> None:
     rows = fetch_order_rows_for_history(order_id)
     if not rows or not is_archived_status(rows[0].get("order_status")):
         return
+    if not all_order_work_orders_archived(order_id):
+        return
 
     with mysql_connection("Data") as conn:
         with conn.cursor() as cursor:
@@ -631,6 +704,27 @@ def sync_archived_order_to_data(order_id: str) -> None:
             )
         conn.commit()
     remove_archived_order_from_live_tables(order_id)
+
+
+def all_order_work_orders_archived(order_id: str) -> bool:
+    if not order_id:
+        return False
+    try:
+        with mysql_connection("order") as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT `工单状态` AS status
+                    FROM `work_orders`
+                    WHERE `所属订单号` = %s
+                    """,
+                    (order_id,),
+                )
+                rows = cursor.fetchall()
+                return bool(rows) and all(is_archived_status(row.get("status")) for row in rows)
+    except Exception as exc:
+        print(f"order archive completeness check skipped for {order_id}: {exc}", file=sys.stderr, flush=True)
+        return False
 
 
 def archived_order_history_exists(order_id: str) -> bool:
@@ -658,6 +752,8 @@ def remove_archived_order_from_live_tables(order_id: str, require_history: bool 
     if not order_id:
         return {"orders": 0, "work_orders": 0}
     if require_history and not archived_order_history_exists(order_id):
+        return {"orders": 0, "work_orders": 0}
+    if not all_order_work_orders_archived(order_id):
         return {"orders": 0, "work_orders": 0}
 
     with mysql_connection("order") as conn:
@@ -1356,10 +1452,11 @@ def run_windows_consumer() -> None:
                 continue
             output = (completed.stdout or "").strip()
             error = (completed.stderr or "").strip()
+            bodies = parse_mqadmin_bodies(output) if output else []
             if "No topic route info" in error or "Can not find Message Queue" in error:
                 ensure_rocketmq_topic(mqadmin, env, config)
-            if output:
-                for msg_id, body in parse_mqadmin_bodies(output):
+            if bodies:
+                for msg_id, body in bodies:
                     if msg_id and msg_id in seen_msg_ids:
                         continue
                     if msg_id:
@@ -1374,7 +1471,14 @@ def run_windows_consumer() -> None:
             except Exception as exc:
                 print(f"device heartbeat stale check skipped: {exc}", file=sys.stderr, flush=True)
             run_scheduler_queue_tick()
-            begin_timestamp_ms = end_timestamp_ms + 1
+            if len(bodies) >= int(config["batch_size"]):
+                print(
+                    f"mqadmin returned full batch ({len(bodies)}); retrying same time window",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            else:
+                begin_timestamp_ms = end_timestamp_ms + 1
             time.sleep(interval)
     except KeyboardInterrupt:
         pass
