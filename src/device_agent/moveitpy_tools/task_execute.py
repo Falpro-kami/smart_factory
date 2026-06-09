@@ -33,10 +33,10 @@ def set_workorder_status(work_order_id: str, status: str, details: dict) -> None
     set_status(work_order_id, status, details)
 
 
-def set_device_status(mode: str, status: str) -> None:
+def set_device_status(connection_state: str, status: str) -> None:
     from device_status import set_status
 
-    set_status(mode, status)
+    set_status(connection_state, status)
 
 
 def build_parser() -> argparse.ArgumentParser:

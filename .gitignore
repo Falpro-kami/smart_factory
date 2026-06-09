@@ -34,7 +34,6 @@ mujoco_log.txt
 *.db
 *.db-*
 *.jsonl
-/src/device_agent/agent/device_agent_state.json
 /src/device_agent/agent/device_status.sqlite3
 /src/device_agent/agent/device_workorder_status.sqlite3
 /src/device_agent/agent/device_adapter_pending.sqlite3
