@@ -1,11 +1,11 @@
-﻿# SIMENS Agent Demo
+﻿# manufacturing_agent
 
-`SIMENS_Agent_Demo/` 是面向智能产线的 Agent 与数字孪生演示项目。项目把产线 ontology、MySQL 业务数据、Neo4j 图数据、MCP 工具、FastAPI 后端和前端控制台组合在一起，用于展示设备、订单、物料、产品、工艺、AGV 运输任务、推理规则、生产报告和产线管控 Agent 会话。
+`manufacturing_agent/` 是面向智能产线的 Agent 与数字孪生演示项目。项目把产线 ontology、MySQL 业务数据、Neo4j 图数据、MCP 工具、FastAPI 后端和前端控制台组合在一起，用于展示设备、订单、物料、产品、工艺、AGV 运输任务、推理规则、生产报告和产线管控 Agent 会话。
 
 ## 项目组成
 
 ```text
-SIMENS_Agent_Demo/
+manufacturing_agent/
 ├─ agent_core.py                 # Agent 核心逻辑，CLI 和后端共同复用
 ├─ main.py                       # 终端版 Agent 入口
 ├─ agent_backend_adapter/        # FastAPI 后端适配层
@@ -22,7 +22,7 @@ SIMENS_Agent_Demo/
 
 ## 当前目录状态
 
-- 当前项目根目录为 `E:\codenew\SIMENS_Agent_Demo`。
+- 当前项目根目录为 `E:\codenew\smart_factory\src\manufacturing_agent`。
 - 旧嵌套目录 `E:\codenew\mujoko_ur5e` 已删除，后续不要再引用旧路径。
 - 旧机械臂/MuJoCo/UR10e 控制相关目录和工具已从当前项目链路移除，Agent 只加载智能产线相关 MCP 工具和 skills。
 - `.history`、`.runtime`、`__pycache__`、RocketMQ 运行时 store/logs 不属于源码，不应纳入搜索、提交或上下文交接。
@@ -42,7 +42,7 @@ SIMENS_Agent_Demo/
 搜索或交接上下文时，避免读取大体积或低价值目录：
 
 ```powershell
-rg -n "关键词" E:\codenew\SIMENS_Agent_Demo `
+rg -n "关键词" E:\codenew\smart_factory\src\manufacturing_agent `
   -g "!**/.history/**" `
   -g "!**/.runtime/**" `
   -g "!**/__pycache__/**" `
@@ -58,7 +58,7 @@ VS Code 已在 `.vscode/settings.json` 中排除上述目录，Git 已在 `.giti
 建议在项目根目录执行：
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo
+cd E:\codenew\smart_factory\src\manufacturing_agent
 python -m pip install -r requirements.txt
 ```
 
@@ -94,7 +94,7 @@ NEO4J_DATABASE=neo4j
 在项目根目录执行：
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo
+cd E:\codenew\smart_factory\src\manufacturing_agent
 .\start_system.ps1
 ```
 
@@ -148,7 +148,7 @@ cd E:\codenew\SIMENS_Agent_Demo
 ### 1. 启动后端
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo
+cd E:\codenew\smart_factory\src\manufacturing_agent
 python -m agent_backend_adapter.app
 ```
 
@@ -173,7 +173,7 @@ http://127.0.0.1:8000
 ### 2. 启动数字孪生前端
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo\digital-twin-frontend
+cd E:\codenew\smart_factory\src\manufacturing_agent\digital-twin-frontend
 python -m http.server 5175 --bind 127.0.0.1
 ```
 
@@ -190,7 +190,7 @@ http://127.0.0.1:5175
 如果只想验证 Agent 核心逻辑，可以运行：
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo
+cd E:\codenew\smart_factory\src\manufacturing_agent
 python main.py
 ```
 
@@ -364,3 +364,5 @@ summary: { total, waiting, transporting, completed, cancelled }
 - 设备属性视图只展示设备资产数据；任务、运输、时间和负载信息应放在设备当前任务或设备运行历史中。
 - 修改前端模板字符串后，执行 `node --check` 做语法检查。
 - 不要恢复旧 `mujoko_ur5e` 路径、`robotcontrol`、`ur10e_2f85` 或机械臂抓取 skill；这些内容已从当前智能产线演示范围移除。
+
+

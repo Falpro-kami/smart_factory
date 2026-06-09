@@ -1,6 +1,6 @@
 ﻿# 数字孪生 Ontology 前端
 
-`digital-twin-frontend/` 是 SIMENS_Agent_Demo 的轻量前端控制台，使用原生 HTML、CSS 和 ES Modules 构建。页面用于展示智能产线 ontology、本体类拓扑、设备/订单/物料/产品/工艺实例、设备状态、历史数据、报告模板以及产线管控 Agent 会话。
+`digital-twin-frontend/` 是 manufacturing_agent 的轻量前端控制台，使用原生 HTML、CSS 和 ES Modules 构建。页面用于展示智能产线 ontology、本体类拓扑、设备/订单/物料/产品/工艺实例、设备状态、历史数据、报告模板以及产线管控 Agent 会话。
 
 ## 端口约定
 
@@ -17,7 +17,7 @@ http://127.0.0.1:5175
 先启动后端服务：
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo
+cd E:\codenew\smart_factory\src\manufacturing_agent
 python -m agent_backend_adapter.app
 ```
 
@@ -30,7 +30,7 @@ http://127.0.0.1:8000
 再启动前端静态服务：
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo\digital-twin-frontend
+cd E:\codenew\smart_factory\src\manufacturing_agent\digital-twin-frontend
 python -m http.server 5175 --bind 127.0.0.1
 ```
 
@@ -258,3 +258,4 @@ table: tasks
 tasks: [...]
 summary: { total, waiting, transporting, completed, cancelled }
 ```
+

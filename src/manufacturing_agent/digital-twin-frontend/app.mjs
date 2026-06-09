@@ -87,7 +87,7 @@ const REASONING_RULE_TEMPLATES = [
   },
 ];
 const AGENT_CALL_SCOPE = [
-  "Frontend scope: this request belongs only to the SIMENS_Agent_Demo smart production-line ontology project.",
+  "Frontend scope: this request belongs only to the manufacturing_agent smart production-line ontology project.",
   "Use only the current backend ontology, MySQL, Neo4j, split MCP, skills, and project data.",
   "Do not call, infer, or require tools outside this smart production-line project.",
   "When the user mentions equipment or workstations, treat them as ontology production-line entities.",
@@ -6165,6 +6165,7 @@ function initialize() {
 }
 
 initialize();
+
 
 
 

@@ -10,12 +10,12 @@ $ProcessFile = Join-Path $RuntimeDir "system-processes.json"
 $RocketMqHome = Join-Path $Root "rocketmq\rocketmq-all-5.3.2-bin-release"
 $MqShutdown = Join-Path $RocketMqHome "bin\mqshutdown.cmd"
 $ServiceTitles = @(
-    "SIMENS RocketMQ NameServer",
-    "SIMENS RocketMQ Broker",
-    "SIMENS Backend",
-    "SIMENS Digital Twin Frontend",
-    "SIMENS Scheduler Service",
-    "SIMENS Interactive Agent"
+    "manufacturing_agent RocketMQ NameServer",
+    "manufacturing_agent RocketMQ Broker",
+    "manufacturing_agent Backend",
+    "manufacturing_agent Digital Twin Frontend",
+    "manufacturing_agent Scheduler Service",
+    "manufacturing_agent Interactive Agent"
 )
 
 function Stop-ProcessTree {
@@ -109,4 +109,4 @@ Stop-ProjectPortProcess -Port 8000 -CommandPattern "agent_backend_adapter\.app"
 Stop-ProjectPortProcess -Port 5175 -CommandPattern "http\.server 5175|serve\.py"
 
 Remove-Item -LiteralPath $ProcessFile -Force -ErrorAction SilentlyContinue
-Write-Host "Stopped SIMENS system components."
+Write-Host "Stopped manufacturing_agent system components."

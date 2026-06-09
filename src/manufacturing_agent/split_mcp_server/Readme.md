@@ -1,4 +1,4 @@
-# split_mcp_server 逻辑说明
+﻿# split_mcp_server 逻辑说明
 
 `split_mcp_server` 是一个基于 MCP stdio 的低层服务，向外暴露 `split_product_order` 工具，用于把产品订单拆分为生产工单。
 
@@ -40,7 +40,7 @@
 | `NEO4J_PASSWORD` | 空字符串 | Neo4j 密码 |
 | `NEO4J_DATABASE` | `neo4j` | Neo4j 数据库名 |
 
-`.env` 的读取路径为 `SIMENS_Agent_Demo/.env`。
+`.env` 的读取路径为 `manufacturing_agent/.env`。
 
 ## 核心流程
 
@@ -182,3 +182,4 @@
 - 工艺路线查询存在三级兜底：`ProcessInstance`、产品关联 `AssemblyStep`、全库 `AssemblyStep`。
 - 如果 Neo4j 中没有任何可用工艺步骤，仍会生成出库、质检、入库 3 类固定工单。
 - 源文件中部分中文字符串可能存在编码显示异常，但不影响对业务流程和数据结构的判断。
+

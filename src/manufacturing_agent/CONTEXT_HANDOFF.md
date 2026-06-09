@@ -1,8 +1,8 @@
-# CONTEXT_HANDOFF
+﻿# CONTEXT_HANDOFF
 
 ## 项目现状
 
-- 当前项目根目录：`E:\codenew\SIMENS_Agent_Demo`
+- 当前项目根目录：`E:\codenew\smart_factory\src\manufacturing_agent`
 - 旧嵌套目录：`E:\codenew\mujoko_ur5e` 已删除。
 - 前端：`digital-twin-frontend`
 - 后端：`agent_backend_adapter`
@@ -36,7 +36,7 @@
 推荐搜索模板：
 
 ```powershell
-rg -n "关键词" E:\codenew\SIMENS_Agent_Demo `
+rg -n "关键词" E:\codenew\smart_factory\src\manufacturing_agent `
   -g "!**/.history/**" `
   -g "!**/.runtime/**" `
   -g "!**/__pycache__/**" `
@@ -123,7 +123,7 @@ python -m py_compile agent_backend_adapter\ontology_api.py agent_backend_adapter
 node --check digital-twin-frontend\app.mjs
 ```
 
-迁移到 `E:\codenew\SIMENS_Agent_Demo` 后已验证：
+迁移到 `E:\codenew\smart_factory\src\manufacturing_agent` 后已验证：
 
 ```powershell
 python -m py_compile agent_core.py main.py agent_backend_adapter\app.py
@@ -147,3 +147,4 @@ node --check digital-twin-frontend\app.mjs
    - 模拟入库完成事件。
    - 验证 `store.product` 新增成品。
 4. 如果新会话继续，先读取本文件，不要重复读取长日志、`.history` 或运行时目录。
+

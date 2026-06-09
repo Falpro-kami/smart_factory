@@ -1,6 +1,6 @@
----
+﻿---
 name: product-production-analysis-report
-description: Generate product production time analysis reports for the SIMENS_Agent_Demo smart production-line ontology project. Use when the agent must analyze Data order/work-order history, product-process topology, process durations, production-time distribution, bottlenecks, or create a report from the product production analysis template.
+description: Generate product production time analysis reports for the manufacturing_agent smart production-line ontology project. Use when the agent must analyze Data order/work-order history, product-process topology, process durations, production-time distribution, bottlenecks, or create a report from the product production analysis template.
 ---
 
 # Product Production Analysis Report
@@ -104,3 +104,4 @@ Do not use `RETURN ... ORDER BY coalesce(s.stepId, s.order, 0)` because Neo4j ca
 - If data is insufficient, state exactly which field or table is missing.
 - Do not fabricate product names, process names, durations, orders, or stations.
 - Return report text plus chart-ready tables when the UI or user needs visualization.
+

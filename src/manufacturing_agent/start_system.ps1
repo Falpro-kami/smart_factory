@@ -17,12 +17,12 @@ $LogDir = Join-Path $RuntimeDir "logs"
 $ProcessFile = Join-Path $RuntimeDir "system-processes.json"
 $StartedProcesses = @()
 $ServiceTitles = @(
-    "SIMENS RocketMQ NameServer",
-    "SIMENS RocketMQ Broker",
-    "SIMENS Backend",
-    "SIMENS Digital Twin Frontend",
-    "SIMENS Scheduler Service",
-    "SIMENS Interactive Agent"
+    "manufacturing_agent RocketMQ NameServer",
+    "manufacturing_agent RocketMQ Broker",
+    "manufacturing_agent Backend",
+    "manufacturing_agent Digital Twin Frontend",
+    "manufacturing_agent Scheduler Service",
+    "manufacturing_agent Interactive Agent"
 )
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
@@ -203,14 +203,14 @@ $rocketMqDir = Join-Path $Root "rocketmq"
 
 if (-not $NoRocketMQ -and -not $NoRocketMQServer) {
     Start-SystemProcess `
-        -Title "SIMENS RocketMQ NameServer" `
+        -Title "manufacturing_agent RocketMQ NameServer" `
         -WorkingDirectory $rocketMqDir `
         -Command "& .\start-namesrv.ps1"
 
     Start-Sleep -Seconds 3
 
     Start-SystemProcess `
-        -Title "SIMENS RocketMQ Broker" `
+        -Title "manufacturing_agent RocketMQ Broker" `
         -WorkingDirectory $rocketMqDir `
         -Command "& .\start-broker.ps1"
 
@@ -219,28 +219,28 @@ if (-not $NoRocketMQ -and -not $NoRocketMQServer) {
 
 if (-not $NoBackend) {
     Start-SystemProcess `
-        -Title "SIMENS Backend" `
+        -Title "manufacturing_agent Backend" `
         -WorkingDirectory $Root `
         -Command ($setPythonPath + "& " + (Quote-PsString $Python) + " -m agent_backend_adapter.app")
 }
 
 if (-not $NoFrontend) {
     Start-SystemProcess `
-        -Title "SIMENS Digital Twin Frontend" `
+        -Title "manufacturing_agent Digital Twin Frontend" `
         -WorkingDirectory (Join-Path $Root "digital-twin-frontend") `
         -Command ("& " + (Quote-PsString $Python) + " .\serve.py")
 }
 
 if (-not $NoRocketMQ -and -not $NoRocketMQConsumer) {
     Start-SystemProcess `
-        -Title "SIMENS Scheduler Service" `
+        -Title "manufacturing_agent Scheduler Service" `
         -WorkingDirectory $Root `
         -Command ($setPythonPath + "& " + (Quote-PsString $Python) + " .\split_mcp_server\src\split_mcp_server\scheduler_service.py")
 }
 
 if (-not $NoAgent) {
     Start-SystemProcess `
-        -Title "SIMENS Interactive Agent" `
+        -Title "manufacturing_agent Interactive Agent" `
         -WorkingDirectory $Root `
         -Command ($setPythonPath + "& " + (Quote-PsString $Python) + " .\main.py") `
         -Visible
@@ -259,17 +259,17 @@ if (-not $NoBackend) {
         -Name "Backend" `
         -Url "http://127.0.0.1:8000/health" `
         -TimeoutSeconds 75 `
-        -ErrorLog (Join-Path $LogDir "SIMENS_Backend.err.log")
+        -ErrorLog (Join-Path $LogDir "manufacturing_agent_Backend.err.log")
 }
 if (-not $NoFrontend) {
     $frontendReady = Wait-HttpEndpoint `
         -Name "Frontend" `
         -Url "http://127.0.0.1:5175/app.mjs" `
         -TimeoutSeconds 30 `
-        -ErrorLog (Join-Path $LogDir "SIMENS_Digital_Twin_Frontend.err.log")
+        -ErrorLog (Join-Path $LogDir "manufacturing_agent_Digital_Twin_Frontend.err.log")
 }
 
-Write-Host "Started SIMENS system components."
+Write-Host "Started manufacturing_agent system components."
 Write-Host "Backend:  http://127.0.0.1:8000"
 Write-Host "Frontend: http://127.0.0.1:5175"
 Write-Host "Background logs: $LogDir"

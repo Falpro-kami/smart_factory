@@ -35,14 +35,14 @@ start-broker.ps1: $NameServer
 Open terminal 1:
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo\rocketmq
+cd E:\codenew\smart_factory\src\manufacturing_agent\rocketmq
 .\start-namesrv.ps1
 ```
 
 Open terminal 2:
 
 ```powershell
-cd E:\codenew\SIMENS_Agent_Demo\rocketmq
+cd E:\codenew\smart_factory\src\manufacturing_agent\rocketmq
 .\start-broker.ps1
 ```
 
@@ -69,3 +69,4 @@ Both checks must return `TcpTestSucceeded: True`.
 ```powershell
 .\stop-rocketmq.ps1
 ```
+
