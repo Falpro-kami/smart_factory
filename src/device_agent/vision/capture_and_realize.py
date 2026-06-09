@@ -15,8 +15,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 
 
-WS_ROOT = Path("/home/lx/dev_ws")
-TOOLS_DIR = WS_ROOT / "src" / "device_agent" / "vision"
+TOOLS_DIR = Path(__file__).resolve().parent
 ENV_FILE = TOOLS_DIR / ".env"
 DEFAULT_TOPIC = "/table_overview/color/image_raw"
 DEFAULT_DEPTH_TOPIC = "/table_overview/depth/image_raw"

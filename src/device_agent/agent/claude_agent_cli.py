@@ -15,8 +15,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from device_workorder_status import set_status
 
 
-PROJECT_DIR = Path("/home/lx/dev_ws/src/device_agent")
-ONLINE_QUEUE_FILE = PROJECT_DIR / "agent" / "online_messages.jsonl"
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 ONLINE_POLL_INTERVAL_SEC = 1.0
 ADAPTER_URL = os.getenv("DEVICE_AGENT_ADAPTER_URL", "http://127.0.0.1:8765")
 INPUT_SOURCE = os.getenv("DEVICE_AGENT_INPUT_SOURCE", "production")
@@ -91,36 +90,6 @@ def handle_cli_command(command: str) -> bool:
     return False
 
 
-def pop_online_message() -> str | None:
-    if not ONLINE_QUEUE_FILE.exists():
-        return None
-
-    lines = ONLINE_QUEUE_FILE.read_text(encoding="utf-8").splitlines()
-    if not lines:
-        return None
-
-    first = lines[0].strip()
-    ONLINE_QUEUE_FILE.write_text(
-        "\n".join(lines[1:]) + ("\n" if len(lines) > 1 else ""),
-        encoding="utf-8",
-    )
-
-    if not first:
-        return None
-
-    try:
-        payload = json.loads(first)
-    except json.JSONDecodeError:
-        return first
-
-    for key in ("instruction", "task", "prompt", "content"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-
-    return json.dumps(payload, ensure_ascii=False)
-
-
 def pop_online_message_from_adapter() -> str | None:
     try:
         with urlopen(f"{ADAPTER_URL}/messages/next", timeout=2.0) as response:
@@ -165,7 +134,7 @@ def work_order_id_from_payload(payload: dict) -> str | None:
 async def wait_for_online_message() -> str | None:
     print(f"生产输入已启用，等待上层消息 adapter: {ADAPTER_URL}")
     while True:
-        message = pop_online_message_from_adapter() or pop_online_message()
+        message = pop_online_message_from_adapter()
         if message:
             print(f"上层: {message}")
             return message

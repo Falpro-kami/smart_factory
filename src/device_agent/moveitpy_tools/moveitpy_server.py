@@ -26,9 +26,9 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 
-WS_ROOT = Path("/home/lx/dev_ws")
-MOVEIT_CONFIG_DIR = WS_ROOT / "src" / "device_agent" / "ur5e_2f85_moveit_config" / "config"
-ROBOT_XACRO = WS_ROOT / "src" / "device_agent" / "ur10e_2f85_mujoco" / "description" / "urdf" / "ur5e_2f85.urdf.xacro"
+SRC_ROOT = Path(__file__).resolve().parents[1]
+MOVEIT_CONFIG_DIR = SRC_ROOT / "ur5e_2f85_moveit_config" / "config"
+ROBOT_XACRO = SRC_ROOT / "ur10e_2f85_mujoco" / "description" / "urdf" / "ur5e_2f85.urdf.xacro"
 DEFAULT_SOCKET_PATH = "/tmp/moveitpy_server.sock"
 DEFAULT_PLAN_RETRIES = 4
 ARM_JOINT_NAMES = [

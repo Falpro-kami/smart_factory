@@ -10,8 +10,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 
 
-WS_ROOT = Path("/home/lx/dev_ws")
-TOOLS_DIR = WS_ROOT / "src" / "device_agent" / "vision"
+TOOLS_DIR = Path(__file__).resolve().parent
 DEFAULT_TOPIC = "/table_overview/color/image_raw"
 DEFAULT_OUTPUT = TOOLS_DIR / "output" / "table_overview.png"
 DEFAULT_TIMEOUT_SEC = 5.0

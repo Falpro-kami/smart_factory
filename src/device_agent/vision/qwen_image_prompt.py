@@ -9,8 +9,7 @@ from pathlib import Path
 from openai import OpenAI
 
 
-WS_ROOT = Path("/home/lx/dev_ws")
-TOOLS_DIR = WS_ROOT / "src" / "device_agent" / "vision"
+TOOLS_DIR = Path(__file__).resolve().parent
 ENV_FILE = TOOLS_DIR / ".env"
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL = "qwen3-vl-flash"
