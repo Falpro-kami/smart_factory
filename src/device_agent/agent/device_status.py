@@ -52,19 +52,6 @@ def init_db() -> None:
             )
             """
         )
-        migrate_mode_to_connection_state(connection, "device_status")
-        migrate_mode_to_connection_state(connection, "device_status_history")
-
-
-def migrate_mode_to_connection_state(connection: sqlite3.Connection, table_name: str) -> None:
-    columns = [
-        row[1]
-        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-    ]
-    if "mode" not in columns or "connection_state" in columns:
-        return
-
-    connection.execute(f"ALTER TABLE {table_name} RENAME COLUMN mode TO connection_state")
 
 
 def get_status() -> dict | None:
