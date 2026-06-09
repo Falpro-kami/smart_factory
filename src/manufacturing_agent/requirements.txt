@@ -1,0 +1,13 @@
+langchain
+langgraph
+langchain-openai
+langchain-mcp-adapters
+deepagents
+python-dotenv
+fastapi
+uvicorn
+neo4j>=5.26.0
+faster-whisper
+sounddevice
+pymysql
+rocketmq-client-python

@@ -1,0 +1,4 @@
+interface:
+  display_name: "产品生产分析报告"
+  short_description: "按 Data 和产品-工序拓扑生成生产用时分析报告"
+  default_prompt: "根据当前 Data 订单工单历史生成产品生产分析报告"

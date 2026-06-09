@@ -1,0 +1,54 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Ontology Control Room</title>
+  <link rel="stylesheet" href="./styles.css?v=20260602-agent-console-v1">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">ON</div>
+        <div>
+          <p class="brand-name">Ontology</p>
+          <p class="brand-subtitle">Production Line Console</p>
+        </div>
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">&lt;</button>
+      </div>
+
+      <section id="current-ontology" class="current-ontology-block"></section>
+      <nav id="sidebar-nav" class="sidebar-nav" aria-label="Main navigation"></nav>
+    </aside>
+
+    <div class="app-main">
+      <header class="topbar">
+        <div class="topbar-copy">
+          <p id="breadcrumb" class="breadcrumb">Topology / Factory Topology / Topology View</p>
+          <h1 id="page-title">Topology View</h1>
+          <p id="page-description" class="page-description">View ontology topology and entity instances.</p>
+        </div>
+
+        <div class="topbar-utility">
+          <div class="topbar-connection">
+            <label class="api-control">
+              <span>API Base</span>
+              <input id="api-base" type="url" spellcheck="false" autocomplete="off" value="http://127.0.0.1:8000" aria-label="API Base" />
+            </label>
+            <button id="refresh-btn" type="button">Refresh</button>
+          </div>
+        </div>
+      </header>
+
+      <main id="app-root" class="content-root"></main>
+    </div>
+  </div>
+
+  <script type="module" src="./app.mjs?v=20260602-agent-console-v1"></script>
+</body>
+</html>
+

@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.history/
+.runtime/
+logs/
+**/__pycache__/
+rocketmq/rocketmq-all-*-bin-release.zip
+rocketmq/rocketmq-all-*-bin-release/
+rocketmq/store/
+rocketmq/logs/

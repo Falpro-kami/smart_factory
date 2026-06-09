@@ -1,0 +1,32 @@
+{
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    ".history": true,
+    ".runtime": true,
+    "rocketmq/store": true,
+    "rocketmq/logs": true
+  },
+  "files.watcherExclude": {
+    "**/__pycache__/**": true,
+    "**/.history/**": true,
+    "**/.runtime/**": true,
+    "**/rocketmq/store/**": true,
+    "**/rocketmq/logs/**": true
+  },
+  "search.exclude": {
+    "**/__pycache__/**": true,
+    "**/.history/**": true,
+    "**/.runtime/**": true,
+    "**/rocketmq/store/**": true,
+    "**/rocketmq/logs/**": true,
+    "**/uv.lock": true
+  },
+  "python.analysis.exclude": [
+    "**/__pycache__",
+    ".history",
+    ".runtime",
+    "rocketmq/store",
+    "rocketmq/logs"
+  ]
+}
