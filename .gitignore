@@ -19,6 +19,7 @@ htmlcov/
 venv/
 env/
 /src/.venv/
+/src/device_agent/.venv/
 
 # Runtime logs and simulator output
 *.log
@@ -33,29 +34,33 @@ mujoco_log.txt
 *.db
 *.db-*
 *.jsonl
-/src/agent/device_agent_state.json
-/src/agent/device_status.sqlite3
-/src/agent/device_workorder_status.sqlite3
-/src/agent/device_adapter_pending.sqlite3
+/src/device_agent/agent/device_agent_state.json
+/src/device_agent/agent/device_status.sqlite3
+/src/device_agent/agent/device_workorder_status.sqlite3
+/src/device_agent/agent/device_adapter_pending.sqlite3
 
 # Environment and local credentials
 .env
 .env.*
 !.env.example
 /src/vision/.env
+/src/device_agent/vision/.env
 
 # Claude local settings. Keep skills and tasks tracked.
 /src/.claude/settings.local.json
+/src/device_agent/.claude/settings.local.json
 
 # Editor / IDE local files
 /.vscode/
 /src/.vscode/
+/src/device_agent/.vscode/
 *.swp
 *.swo
 *~
 
 # Codex / local agent scratch files
 /.codex
+/src/device_agent/.codex
 /.agents/
 .agents
 

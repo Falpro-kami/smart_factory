@@ -55,16 +55,16 @@ ros2 run ur5e_2f85_moveit_config planning_scene_cubes.py detach Cube1 --xyz 0.0 
 生产启动方式：
 
 ```bash
-python3 /home/lx/dev_ws/src/main.py
+python3 /home/lx/dev_ws/src/device_agent/main.py
 ```
 
 本地调试启动方式：
 
 ```bash
-python3 /home/lx/dev_ws/src/main.py --debug
+python3 /home/lx/dev_ws/src/device_agent/main.py --debug
 ```
 
 `--debug` 只是本地调试输入源，终端提示为 `用户:`，用于调试、测试和本地控制；它不是业务离线状态。
 agent 不要通过自然语言调用 CLI 切换在线/离线。
 
-/home/lx/dev_ws/src/.venv/bin/python src/main.py --virtual-devices
+/home/lx/dev_ws/src/device_agent/.venv/bin/python src/device_agent/main.py --virtual-devices

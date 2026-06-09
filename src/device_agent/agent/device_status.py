@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 
-AGENT_DIR = Path("/home/lx/dev_ws/src/agent")
+AGENT_DIR = Path("/home/lx/dev_ws/src/device_agent/agent")
 STATUS_DB_FILE = AGENT_DIR / "device_status.sqlite3"
 ROCKETMQ_NAMESRV = os.getenv("ROCKETMQ_NAMESRV", "192.168.1.10:9876")
 DEVICE_ID = os.getenv("DEVICE_AGENT_TAG", "DEV002")

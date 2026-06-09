@@ -1,14 +1,14 @@
 # MoveItPy Quick Guide
 
-这份说明配套 [test.py](/home/lx/dev_ws/src/moveitpy_tools/test.py) 使用，目标是让你能尽快上手 `moveit_py` 做规划测试。
+这份说明配套 [test.py](/home/lx/dev_ws/src/device_agent/moveitpy_tools/test.py) 使用，目标是让你能尽快上手 `moveit_py` 做规划测试。
 
 脚本现在会直接从你工程里的：
 
-- [ur5e_2f85.srdf](/home/lx/dev_ws/src/ur5e_2f85_moveit_config/config/ur5e_2f85.srdf)
-- [kinematics.yaml](/home/lx/dev_ws/src/ur5e_2f85_moveit_config/config/kinematics.yaml)
-- [joint_limits.yaml](/home/lx/dev_ws/src/ur5e_2f85_moveit_config/config/joint_limits.yaml)
-- [ompl_planning.yaml](/home/lx/dev_ws/src/ur5e_2f85_moveit_config/config/ompl_planning.yaml)
-- [ur5e_2f85.urdf.xacro](/home/lx/dev_ws/src/ur10e_2f85_mujoco/description/urdf/ur5e_2f85.urdf.xacro)
+- [ur5e_2f85.srdf](/home/lx/dev_ws/src/device_agent/ur5e_2f85_moveit_config/config/ur5e_2f85.srdf)
+- [kinematics.yaml](/home/lx/dev_ws/src/device_agent/ur5e_2f85_moveit_config/config/kinematics.yaml)
+- [joint_limits.yaml](/home/lx/dev_ws/src/device_agent/ur5e_2f85_moveit_config/config/joint_limits.yaml)
+- [ompl_planning.yaml](/home/lx/dev_ws/src/device_agent/ur5e_2f85_moveit_config/config/ompl_planning.yaml)
+- [ur5e_2f85.urdf.xacro](/home/lx/dev_ws/src/device_agent/ur10e_2f85_mujoco/description/urdf/ur5e_2f85.urdf.xacro)
 
 读取配置，生成一份临时 ROS 参数文件，再交给 `MoveItPy` 加载。这样比“完全依赖参数服务器”更稳，也更贴近 `moveit_py` 在 Jazzy 里的原生初始化方式。对 Jazzy 来说，`planning_pipelines` 还需要按嵌套结构提供：
 

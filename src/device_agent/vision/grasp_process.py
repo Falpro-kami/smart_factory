@@ -55,7 +55,7 @@ def get_net():
                    hmax_list=[0.01, 0.02, 0.03, 0.04], 
                    is_training=False)
     net.to(torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
-    checkpoint = torch.load('/home/lx/dev_ws/src/vision/logs/log_rs/checkpoint-rs.tar') # checkpoint_path
+    checkpoint = torch.load('/home/lx/dev_ws/src/device_agent/vision/logs/log_rs/checkpoint-rs.tar') # checkpoint_path
     net.load_state_dict(checkpoint['model_state_dict'])
     net.eval()
     return net

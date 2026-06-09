@@ -4,7 +4,7 @@
 
 当前提供的 CLI:
 
-- [capture_camera.py](/home/lx/dev_ws/src/mujoco_camera_tools/capture_camera.py)
+- [capture_camera.py](/home/lx/dev_ws/src/device_agent/mujoco_camera_tools/capture_camera.py)
 
 ## 功能
 
@@ -31,7 +31,7 @@
 
 也可以直接写在：
 
-- [mujoco_camera_tools/.env](/home/lx/dev_ws/src/mujoco_camera_tools/.env)
+- [mujoco_camera_tools/.env](/home/lx/dev_ws/src/device_agent/mujoco_camera_tools/.env)
 
 ## 常用示例
 
@@ -45,7 +45,7 @@ python3 src/mujoco_camera_tools/capture_camera.py "图中有什么物体？"
 
 ```bash
 python3 src/mujoco_camera_tools/capture_camera.py \
-  --output /home/lx/dev_ws/src/mujoco_camera_tools/output/overview.png \
+  --output /home/lx/dev_ws/src/device_agent/mujoco_camera_tools/output/overview.png \
   "描述桌面上的红色方块位置"
 ```
 
@@ -77,7 +77,7 @@ python3 src/mujoco_camera_tools/capture_camera.py \
 
 默认输出路径：
 
-- [table_overview.png](/home/lx/dev_ws/src/mujoco_camera_tools/output/table_overview.png)
+- [table_overview.png](/home/lx/dev_ws/src/device_agent/mujoco_camera_tools/output/table_overview.png)
 
 如果输出目录不存在，脚本会自动创建。
 
@@ -90,7 +90,7 @@ CLI 运行成功后会做两件事：
 
 工具会自动读取：
 
-- [mujoco_camera_tools/.env](/home/lx/dev_ws/src/mujoco_camera_tools/.env)
+- [mujoco_camera_tools/.env](/home/lx/dev_ws/src/device_agent/mujoco_camera_tools/.env)
 
 当前支持：
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from device_status import set_status as set_device_status
 
 
-STATE_FILE = Path("/home/lx/dev_ws/src/agent/device_agent_state.json")
+STATE_FILE = Path("/home/lx/dev_ws/src/device_agent/agent/device_agent_state.json")
 VALID_MODES = {"offline", "online"}
 
 

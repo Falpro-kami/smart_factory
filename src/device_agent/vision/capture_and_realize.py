@@ -16,7 +16,7 @@ from sensor_msgs.msg import Image
 
 
 WS_ROOT = Path("/home/lx/dev_ws")
-TOOLS_DIR = WS_ROOT / "src" / "vision"
+TOOLS_DIR = WS_ROOT / "src" / "device_agent" / "vision"
 ENV_FILE = TOOLS_DIR / ".env"
 DEFAULT_TOPIC = "/table_overview/color/image_raw"
 DEFAULT_DEPTH_TOPIC = "/table_overview/depth/image_raw"

@@ -17,7 +17,7 @@ from urllib.request import urlopen
 
 
 WS_ROOT = Path("/home/lx/dev_ws")
-SRC_ROOT = WS_ROOT / "src"
+SRC_ROOT = WS_ROOT / "src" / "device_agent"
 VENV_PYTHON = SRC_ROOT / ".venv" / "bin" / "python"
 ROS_SETUP = "/opt/ros/jazzy/setup.bash"
 WS_SETUP = WS_ROOT / "install" / "setup.bash"
@@ -171,7 +171,7 @@ def main() -> int:
     parser.add_argument(
         "--virtual-devices",
         action="store_true",
-        help="Start temporary virtual devices DEV001/DEV003/DEV004.",
+        help="Start temporary virtual devices DEV001/DEV003/DEV004/DEV005.",
     )
     args = parser.parse_args()
 

@@ -15,7 +15,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from device_workorder_status import set_status
 
 
-PROJECT_DIR = Path("/home/lx/dev_ws/src")
+PROJECT_DIR = Path("/home/lx/dev_ws/src/device_agent")
 ONLINE_QUEUE_FILE = PROJECT_DIR / "agent" / "online_messages.jsonl"
 ONLINE_POLL_INTERVAL_SEC = 1.0
 ADAPTER_URL = os.getenv("DEVICE_AGENT_ADAPTER_URL", "http://127.0.0.1:8765")
@@ -36,7 +36,7 @@ def build_options() -> ClaudeAgentOptions:
                 "robot-control, vision-realize, task-generator, or "
                 "task-executor as needed. Before commands that move the robot, "
                 "state what command you are about to run and why. Device startup "
-                "is controlled by src/main.py. In production input mode, wait for "
+                "is controlled by src/device_agent/main.py. In production input mode, wait for "
                 "upper-system messages; in debug input mode, accept terminal user input."
             ),
         },

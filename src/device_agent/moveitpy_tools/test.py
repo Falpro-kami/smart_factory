@@ -13,8 +13,8 @@ from moveit.utils import create_params_file_from_dict
 
 
 WS_ROOT = Path("/home/lx/dev_ws")
-MOVEIT_CONFIG_DIR = WS_ROOT / "src" / "ur5e_2f85_moveit_config" / "config"
-ROBOT_XACRO = WS_ROOT / "src" / "ur10e_2f85_mujoco" / "description" / "urdf" / "ur5e_2f85.urdf.xacro"
+MOVEIT_CONFIG_DIR = WS_ROOT / "src" / "device_agent" / "ur5e_2f85_moveit_config" / "config"
+ROBOT_XACRO = WS_ROOT / "src" / "device_agent" / "ur10e_2f85_mujoco" / "description" / "urdf" / "ur5e_2f85.urdf.xacro"
 
 
 def build_parser() -> argparse.ArgumentParser:

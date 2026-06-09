@@ -5,13 +5,13 @@
 安装依赖：
 
 ```bash
-python3 -m pip install -r src/agent/requirements.txt
+python3 -m pip install -r src/device_agent/agent/requirements.txt
 ```
 
 启动多轮对话入口：
 
 ```bash
-python3 src/agent/claude_agent_cli.py
+python3 src/device_agent/agent/claude_agent_cli.py
 ```
 
 启动后会显示：
@@ -25,7 +25,7 @@ python3 src/agent/claude_agent_cli.py
 默认工作目录是：
 
 ```text
-/home/lx/dev_ws/src
+/home/lx/dev_ws/src/device_agent
 ```
 
 这样 SDK 会按 Claude Code 的方式读取 `.claude/skills`、`.claude/settings.local.json` 等项目配置。

@@ -10,7 +10,7 @@ from openai import OpenAI
 
 
 WS_ROOT = Path("/home/lx/dev_ws")
-TOOLS_DIR = WS_ROOT / "src" / "vision"
+TOOLS_DIR = WS_ROOT / "src" / "device_agent" / "vision"
 ENV_FILE = TOOLS_DIR / ".env"
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL = "qwen3-vl-flash"
