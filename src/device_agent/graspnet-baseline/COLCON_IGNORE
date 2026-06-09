@@ -1,0 +1,2 @@
+This directory is a vendored GraspNet Python/CUDA dependency, not a ROS 2 package.
+Do not let colcon recurse into setup.py files here.

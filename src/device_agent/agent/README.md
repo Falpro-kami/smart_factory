@@ -27,7 +27,7 @@ python3 src/device_agent/main.py --debug
 默认工作目录是：
 
 ```text
-/home/lx/dev_ws/src/device_agent
+/path/to/smart_factory/src/device_agent
 ```
 
 这样 SDK 会按 Claude Code 的方式读取 `.claude/skills`、`.claude/settings.local.json` 等项目配置。

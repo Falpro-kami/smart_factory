@@ -15,7 +15,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from device_workorder_status import set_status
 
 
-PROJECT_DIR = Path("/home/lx/dev_ws/src/device_agent")
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 ONLINE_POLL_INTERVAL_SEC = 1.0
 ADAPTER_URL = os.getenv("DEVICE_AGENT_ADAPTER_URL", "http://127.0.0.1:8765")
 INPUT_SOURCE = os.getenv("DEVICE_AGENT_INPUT_SOURCE", "production")

@@ -7,9 +7,10 @@ import numpy as np
 from ultralytics.models.sam import SAM3SemanticPredictor
 
 
-IMAGE_PATH = Path("/home/lx/dev_ws/src/device_agent/vision/output/table_overview.png")
-OUTPUT_DIR = Path("/home/lx/dev_ws/src/device_agent/vision/output/sam_result")
-MODEL_PATH = Path("/home/lx/dev_ws/src/device_agent/vision/sam3.pt")
+VISION_DIR = Path(__file__).resolve().parent
+IMAGE_PATH = VISION_DIR / "output" / "table_overview.png"
+OUTPUT_DIR = VISION_DIR / "output" / "sam_result"
+MODEL_PATH = VISION_DIR / "sam3.pt"
 BBOX_PREVIEW_PATH = OUTPUT_DIR / "bboxes_overlay.png"
 MASK_OVERLAY_PATH = OUTPUT_DIR / "masks_overlay.png"
 MASK_BINARY_PATH = OUTPUT_DIR / "masks_binary.png"

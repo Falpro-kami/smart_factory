@@ -16,8 +16,8 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 
-WS_ROOT = Path("/home/lx/dev_ws")
-SRC_ROOT = WS_ROOT / "src" / "device_agent"
+SRC_ROOT = Path(__file__).resolve().parent
+WS_ROOT = SRC_ROOT.parent.parent
 VENV_PYTHON = SRC_ROOT / ".venv" / "bin" / "python"
 ROS_SETUP = "/opt/ros/jazzy/setup.bash"
 WS_SETUP = WS_ROOT / "install" / "setup.bash"

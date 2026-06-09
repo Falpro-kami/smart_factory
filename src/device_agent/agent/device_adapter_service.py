@@ -20,7 +20,7 @@ from device_workorder_status import set_status
 
 HOST = "127.0.0.1"
 PORT = 8765
-AGENT_DIR = Path("/home/lx/dev_ws/src/device_agent/agent")
+AGENT_DIR = Path(__file__).resolve().parent
 EVENT_OUTBOX_FILE = AGENT_DIR / "device_events.jsonl"
 PENDING_DB_FILE = AGENT_DIR / "device_adapter_pending.sqlite3"
 ROCKETMQ_NAMESRV = os.getenv("ROCKETMQ_NAMESRV", "192.168.1.10:9876")
