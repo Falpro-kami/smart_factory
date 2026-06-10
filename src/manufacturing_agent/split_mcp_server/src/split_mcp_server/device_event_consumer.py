@@ -14,6 +14,10 @@ from typing import Any
 
 import pymysql
 from dotenv import load_dotenv
+from split_mcp_server.scheduler_service import (
+    run_scheduler_queue_tick,
+    trigger_after_workorder_event,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -1132,40 +1136,6 @@ def extract_work_order_id(event: dict[str, Any]) -> str:
     ).strip()
 
 
-def run_scheduler_after_workorder_event(order_id: str, status: str) -> None:
-    if not order_id or status not in {"已完成", "失败"}:
-        return
-    try:
-        from split_mcp_server.server import run_scheduler_queue_once, submit_order_to_scheduler
-
-        submit_order_to_scheduler({"order_id": order_id})
-        result = run_scheduler_queue_once(limit=20)
-        summary = result.get("summary") if isinstance(result, dict) else {}
-        print(
-            f"scheduler queue triggered after work order event: order_id={order_id}, summary={summary}",
-            file=sys.stderr,
-            flush=True,
-        )
-    except Exception as exc:
-        print(f"scheduler trigger skipped for order {order_id}: {exc}", file=sys.stderr, flush=True)
-
-
-def run_scheduler_queue_tick(limit: int = 20) -> None:
-    try:
-        from split_mcp_server.server import run_scheduler_queue_once
-
-        result = run_scheduler_queue_once(limit=limit)
-        processed_count = int(result.get("processed_count") or 0) if isinstance(result, dict) else 0
-        if processed_count:
-            print(
-                f"scheduler queue tick processed {processed_count} order(s)",
-                file=sys.stderr,
-                flush=True,
-            )
-    except Exception as exc:
-        print(f"scheduler queue tick skipped: {exc}", file=sys.stderr, flush=True)
-
-
 def release_device_after_workorder_event(event: dict[str, Any], status: str) -> None:
     if status not in {"已完成", "失败"}:
         return
@@ -1298,7 +1268,7 @@ def handle_workorder_status_changed(event: dict[str, Any]) -> None:
             "updated_at": event_time.isoformat(timespec="seconds"),
         },
     )
-    run_scheduler_after_workorder_event(order_id, status)
+    trigger_after_workorder_event(order_id, status)
 
 
 def handle_device_event(body: Any) -> None:

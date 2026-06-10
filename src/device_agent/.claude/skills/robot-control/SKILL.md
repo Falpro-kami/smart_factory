@@ -22,7 +22,7 @@ description: 使用该技能来通过 moveitpy_cli 调用 MoveItPy 常驻服务�
 
 ## 相关文件
 
-- CLI: `/home/lx/dev_ws/src/moveitpy_tools/moveitpy_cli.py`
+- CLI: `/home/lx/smart_factory/src/device_agent/moveitpy_tools/moveitpy_cli.py`
 
 ## 常用命令
 

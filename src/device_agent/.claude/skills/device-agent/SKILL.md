@@ -47,7 +47,7 @@ description: 顶层设备智能体技能。用于理解来自上层生产智能�
 1. 如果上层工单包含 `process_id`，直接使用 `task-executor` 按工序号异步提交任务；执行时带上工单号：
 
 ```bash
-python3 /home/lx/dev_ws/src/moveitpy_tools/task_execute.py --process-id <process_id> --work-order-id <work_order_id>
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/moveitpy_tools/task_execute.py --process-id <process_id> --work-order-id <work_order_id>
 ```
 
 2. 如果执行器返回找不到对应 `process_id`，再根据 `process_description` 或 `instruction` 判断是否需要生成新任务、请求补充信息或使用其他技能。

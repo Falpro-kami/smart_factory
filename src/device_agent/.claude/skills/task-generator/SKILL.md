@@ -21,17 +21,17 @@ description: 当用户希望根据一个未知目标进行示教、自动规划�
 
 ## 相关文件
 
-- 任务目录: `/home/lx/dev_ws/src/.claude/tasks`
-- 任务执行器: `/home/lx/dev_ws/src/moveitpy_tools/task_execute.py`
-- 机器人控制 skill: `/home/lx/dev_ws/src/.claude/skills/robot-control/SKILL.md`
-- 视觉 skill: `/home/lx/dev_ws/src/.claude/skills/vision-realize/SKILL.md`
+- 任务目录: `/home/lx/smart_factory/src/device_agent/.claude/tasks`
+- 任务执行器: `/home/lx/smart_factory/src/device_agent/moveitpy_tools/task_execute.py`
+- 机器人控制 skill: `/home/lx/smart_factory/src/device_agent/.claude/skills/robot-control/SKILL.md`
+- 视觉 skill: `/home/lx/smart_factory/src/device_agent/.claude/skills/vision-realize/SKILL.md`
 
 ## 目标
 
 把用户给出的目标描述，转成一个新的 JSON 任务文件，通常保存在：
 
 ```text
-/home/lx/dev_ws/src/.claude/tasks/task_<name>.json
+/home/lx/smart_factory/src/device_agent/.claude/tasks/task_<name>.json
 ```
 
 生成的 JSON 要兼容现有 `task_execute.py` 风格。

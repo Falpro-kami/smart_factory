@@ -14,8 +14,8 @@ description: 当用户要求执行固定流程任务 JSON 时使用此技能。�
 
 ## 相关文件
 
-- 任务执行器: `/home/lx/dev_ws/src/moveitpy_tools/task_execute.py`
-- 常见任务目录: `/home/lx/dev_ws/src/.claude/tasks`
+- 任务执行器: `/home/lx/smart_factory/src/device_agent/moveitpy_tools/task_execute.py`
+- 常见任务目录: `/home/lx/smart_factory/src/device_agent/.claude/tasks`
 
 如果用户只是要执行单条机器人命令，优先使用 `robot_control` skill。
 如果用户处理的是“多步 JSON 任务”，优先使用本技能。

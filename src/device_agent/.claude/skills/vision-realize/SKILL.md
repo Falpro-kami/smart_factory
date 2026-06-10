@@ -20,40 +20,40 @@ description: 使用该技能来执行机器人视觉相关 CLI，包括从 MuJoC
 
 ## 相关文件
 
-- Vision QA CLI: `/home/lx/dev_ws/src/vision/capture_and_realize.py`
-- SAM CLI: `/home/lx/dev_ws/src/vision/SAM.py`
-- GraspNet CLI: `/home/lx/dev_ws/src/vision/grasp_process.py`
+- Vision QA CLI: `/home/lx/smart_factory/src/device_agent/vision/capture_and_realize.py`
+- SAM CLI: `/home/lx/smart_factory/src/device_agent/vision/SAM.py`
+- GraspNet CLI: `/home/lx/smart_factory/src/device_agent/vision/grasp_process.py`
 
 ## 常用命令
 
 抓图并让多模态模型回答一个问题：
 
 ```bash
-/home/lx/dev_ws/src/.venv/bin/python3 vision/capture_and_realize.py "图中有什么物体？"
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/vision/capture_and_realize.py "图中有什么物体？"
 ```
 
 抓图并输出相对位置判断：
 
 ```bash
-/home/lx/dev_ws/src/.venv/bin/python3 vision/capture_and_realize.py "夹爪和方块的相对位置是什么？请简短回答。"
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/vision/capture_and_realize.py "夹爪和方块的相对位置是什么？请简短回答。"
 ```
 
 抓图并要求结构化结果：
 
 ```bash
-/home/lx/dev_ws/src/.venv/bin/python3 vision/capture_and_realize.py "请输出 JSON，字段包含 objects、cube_relative_to_gripper、scene_summary"
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/vision/capture_and_realize.py "请输出 JSON，字段包含 objects、cube_relative_to_gripper、scene_summary"
 ```
 
 对单个 bbox 执行 SAM 分割：
 
 ```bash
-/home/lx/dev_ws/src/.venv/bin/python3 vision/SAM.py --bbox 109 166 170 236
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/vision/SAM.py --bbox 109 166 170 236
 ```
 
 对多个 bbox 执行 SAM 分割：
 
 ```bash
-/home/lx/dev_ws/src/.venv/bin/python3 vision/SAM.py \
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/vision/SAM.py \
   --bbox 109 166 170 236 \
   --bbox 296 167 354 236 \
   --bbox 471 167 529 236 \
@@ -63,7 +63,7 @@ description: 使用该技能来执行机器人视觉相关 CLI，包括从 MuJoC
 基于当前输出目录中的彩色图、深度图和 SAM 掩码执行 GraspNet 抓取推理：
 
 ```bash
-/home/lx/dev_ws/src/.venv/bin/python3 vision/grasp_process.py
+/home/lx/smart_factory/src/device_agent/.venv/bin/python /home/lx/smart_factory/src/device_agent/vision/grasp_process.py
 ```
 
 ## 工作方式
@@ -76,10 +76,10 @@ description: 使用该技能来执行机器人视觉相关 CLI，包括从 MuJoC
 
 ### capture_and_realize.py 要点
 
-- 需要使用虚拟环境解释器：`/home/lx/dev_ws/src/.venv/bin/python3`
+- 需要使用虚拟环境解释器：`/home/lx/smart_factory/src/device_agent/.venv/bin/python`
 - 位置参数是提示词，不能省略
 - 会保存彩色图、深度 PNG、彩色深度可视化和深度 `.npy`
-- 默认输出目录在 `/home/lx/dev_ws/src/vision/output`
+- 默认输出目录在 `/home/lx/smart_factory/src/device_agent/vision/output`
 
 ### SAM.py 要点
 
@@ -87,16 +87,16 @@ description: 使用该技能来执行机器人视觉相关 CLI，包括从 MuJoC
 - 可以重复传多个 `--bbox`
 - 当前脚本不接收 `label`
 - 主要输出：
-  - `/home/lx/dev_ws/src/vision/output/sam_result/bboxes_overlay.png`
-  - `/home/lx/dev_ws/src/vision/output/sam_result/masks_overlay.png`
-  - `/home/lx/dev_ws/src/vision/output/sam_result/masks_binary.png`
+  - `/home/lx/smart_factory/src/device_agent/vision/output/sam_result/bboxes_overlay.png`
+  - `/home/lx/smart_factory/src/device_agent/vision/output/sam_result/masks_overlay.png`
+  - `/home/lx/smart_factory/src/device_agent/vision/output/sam_result/masks_binary.png`
 
 ### grasp_process.py 要点
 
 - 默认读取以下文件，不需要额外传参：
-  - `/home/lx/dev_ws/src/vision/output/table_overview.png`
-  - `/home/lx/dev_ws/src/vision/output/table_overview_depth.png`
-  - `/home/lx/dev_ws/src/vision/output/sam_result/masks_binary.png`
+  - `/home/lx/smart_factory/src/device_agent/vision/output/table_overview.png`
+  - `/home/lx/smart_factory/src/device_agent/vision/output/table_overview_depth.png`
+  - `/home/lx/smart_factory/src/device_agent/vision/output/sam_result/masks_binary.png`
 - 因此通常需要先完成抓图和 SAM 分割
 - 该脚本会弹出 Open3D 可视化窗口
 
