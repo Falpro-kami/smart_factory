@@ -34,9 +34,9 @@ ENTITY_CONFIG: dict[str, dict[str, Any]] = {
         "database": "store",
         "include_keywords": ("material", "inventory", "store"),
         "exclude_keywords": (),
-        "id_keys": ("物料编号", "物料ID", "物料编码", "material_id", "materialId", "material_code", "materialCode", "id", "code"),
-        "label_keys": ("物料名称", "物料名", "material_name", "materialName", "name"),
-        "subtitle_keys": ("库位", "库位编号", "仓位", "location", "slot", "material_location"),
+        "id_keys": ("物料编号", "物料编码", "产品编号", "material_code", "materialCode", "product_code", "productCode", "code"),
+        "label_keys": ("物料名称", "物料名", "产品名称", "material_name", "materialName", "product_name", "productName", "name"),
+        "subtitle_keys": ("库位", "库位编号", "库位号", "仓位", "location", "slot", "material_location"),
         "status_keys": ("运行状态", "设备状态", "启动状态", "状态", "工单状态", "订单状态", "运输状态", "任务状态", "status", "state", "runtime_status", "runtimeStatus", "work_status", "workStatus", "transport_status", "transportStatus"),
     },
     "order": {
