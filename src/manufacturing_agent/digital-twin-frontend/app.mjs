@@ -15,6 +15,7 @@ const SIDEBAR_STORAGE_KEY = "digitalTwinSidebarCollapsed";
 const NAV_STORAGE_KEY = "digitalTwinNavExpanded";
 const CLASS_STORAGE_KEY = "digitalTwinClassState";
 const SEARCH_HISTORY_STORAGE_KEY = "digitalTwinGlobalSearchHistory";
+const THEME_STORAGE_KEY = "digitalTwinTheme";
 const API_BASE = "http://127.0.0.1:8000";
 const AGENT_SESSION_ID = "digital-twin-ontology-only";
 const CLASS_NODE_WIDTH = 220;
@@ -125,6 +126,7 @@ const TYPE_ICON_META = {
   order: { label: "OD", tone: "pink" },
   work_order: { label: "WO", tone: "red" },
   material: { label: "MT", tone: "amber" },
+  store_product: { label: "PR", tone: "green" },
   product: { label: "PD", tone: "yellow" },
   process: { label: "PR", tone: "green" },
   craft: { label: "CF", tone: "violet" },
@@ -203,6 +205,7 @@ const state = {
   reports: readStoredReports(),
   liveEvents: { source: null, refreshTimer: null },
   selectedReportId: "",
+  theme: readStoredTheme(),
   agent: {
     messages: readStoredAgentMessages(),
     pending: false,
@@ -225,6 +228,7 @@ const elements = {
   pageDescription: document.querySelector("#page-description"),
   appRoot: document.querySelector("#app-root"),
   agentConsoleRoot: null,
+  themeSwitcherRoot: null,
   apiBaseInput: document.querySelector("#api-base"),
   refreshBtn: document.querySelector("#refresh-btn"),
 };
@@ -333,6 +337,36 @@ function storeClassState() {
     return;
   }
 }
+
+function readStoredTheme() {
+  try {
+    const value = localStorage.getItem(THEME_STORAGE_KEY);
+    return value === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function storeTheme(value) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, value);
+  } catch {
+    return;
+  }
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  document.body.dataset.theme = state.theme;
+}
+
+function setTheme(value) {
+  state.theme = value === "light" ? "light" : "dark";
+  storeTheme(state.theme);
+  applyTheme();
+  renderThemeSwitcher();
+  renderAgentConsoleOverlay();
+}
 function apiBase() {
   const base = elements.apiBaseInput.value.trim().replace(/\/+$/, "");
   if (!base) {
@@ -410,6 +444,7 @@ function deviceSubtype(item) {
 
 function entityIconType(entityType, item = null) {
   if (entityType === "device") return deviceSubtype(item);
+  if (entityType === "material" && normalizeText(item?.properties?.__table || item?.__table || "").includes("product")) return "store_product";
   return entityType;
 }
 
@@ -420,7 +455,7 @@ function mysqlCatalogItem(entityType, row, index) {
     entityType === "device"
       ? deviceCatalogIdentity(row, index)
       : entityType === "material"
-        ? firstField(row, ["物料编号", "物料ID", "物料编码", "material_id", "materialId", "material_code", "materialCode", "id", "code"], `${row.__table}:${index}`)
+        ? firstField(row, ["物料编号", "物料编码", "产品编号", "material_code", "materialCode", "product_code", "productCode", "code"], `${row.__table}:${index}`)
         : entityType === "order"
           ? firstField(row, ["订单编号", "订单ID", "order_id", "orderId", "id", "code"], `${row.__table}:${index}`)
           : firstField(row, ["工单编号", "工单ID", "任务编号", "work_order_id", "workOrderId", "task_id", "taskId", "id", "code"], `${row.__table}:${index}`);
@@ -2731,7 +2766,7 @@ function entityDisplayLabel(item, entityType) {
     if (normalizeText(source).includes("agv")) return "AGV";
   }
   if (entityType === "material") {
-    const label = firstField(props, ["物料名称", "物料", "material_name", "materialName", "name"], "");
+    const label = firstField(props, ["物料名称", "产品名称", "物料", "material_name", "materialName", "product_name", "productName", "name"], "");
     if (label) return label;
   }
   if (entityType === "order") {
@@ -2751,7 +2786,7 @@ function entityDisplaySubtitle(item, entityType) {
     return firstField(props, ["设备编号", "AGV编号", "工站编号", "工作站编号", "device_code", "deviceCode", "device_id", "deviceId", "workstation_code", "workstationCode", "station_code", "stationCode", "agv_code", "agvCode", "agv_id", "agvId", "code"], item?.subtitle || item?.summary || item?.id || "Device");
   }
   if (entityType === "material") {
-    return firstField(props, ["库位", "库位编号", "仓位", "location", "slot"], item?.subtitle || item?.summary || item?.id || "Material");
+    return firstField(props, ["库位", "库位编号", "库位号", "仓位", "location", "slot"], item?.subtitle || item?.summary || item?.id || "Material");
   }
   if (entityType === "order") {
     return firstField(props, ["订单编号", "产品名称", "客户名称", "order_id", "product_name", "customer_name"], item?.subtitle || item?.summary || item?.id || "Order");
@@ -3134,7 +3169,7 @@ function buildDeviceTaskTreeItems(deviceItems) {
     const matchedOrder = isStation ? findWorkOrderForDevice(record, workOrders) : null;
     const connection = deviceConnectionState(record);
     const transportTask = isAgv && connection !== "offline" ? deviceTransportTaskForRecord(record, transportRows) : null;
-    const currentId = connection === "offline" ? "" : currentWorkOrderId(record) || agvTaskId(record);
+    const currentId = activeDeviceCurrentWorkOrderId(record) || agvTaskId(record);
     const runtime = deviceRuntimeStatus(record);
     const status = matchedOrder
       ? firstField(matchedOrder, ["工单状", "工单状态", "任务状态", "status", "state"], "执行中")
@@ -3367,6 +3402,7 @@ function renderEntityListPage(entityType) {
                 ? items
                     .map((item, index) => {
                       const id = item.id || `${entityType}:${index}`;
+                      const displayId = entityType === "material" ? globalSearchCode(item, entityType) : id;
                       const iconType = entityIconType(entityType, item);
                       const itemStatus = entityType === "device"
                         ? deviceDisplayStatus({ ...(item.properties || {}), ...(item.runtime || {}), status: item.status })
@@ -3385,7 +3421,7 @@ function renderEntityListPage(entityType) {
                           <td><span class="entity-type-pill">${escapeHtml(TYPE_ICON_META[iconType]?.label || entityType)}</span></td>
                           <td><span class="status-chip ${statusClass(itemStatus)}">${escapeHtml(itemStatus)}</span></td>
                           <td>${escapeHtml(Array.isArray(item.source) ? item.source.join(" · ") : String(item.source || "-"))}</td>
-                          <td>${escapeHtml(id)}</td>
+                          <td>${escapeHtml(displayId || id)}</td>
                         </tr>
                       `;
                     })
@@ -3915,7 +3951,7 @@ function globalSearchCode(item, entityType) {
     return firstField(props, ["工单编号", "工单ID", "任务编号", "work_order_id", "workOrderId", "task_id", "taskId", "code", "id"], fallback);
   }
   if (entityType === "material") {
-    return firstField(props, ["物料编号", "物料ID", "物料编码", "material_code", "materialCode", "material_id", "materialId", "code", "id"], fallback);
+    return firstField(props, ["物料编号", "物料编码", "产品编号", "material_code", "materialCode", "product_code", "productCode", "code"], fallback);
   }
   if (entityType === "product") {
     return firstField(props, ["产品编号", "产品ID", "product_code", "productCode", "product_id", "productId", "code", "id"], fallback);
@@ -4774,11 +4810,18 @@ function assignedDeviceText(row) {
 }
 
 function currentWorkOrderId(row) {
-  return firstField(row, ["当前工单编号", "current_work_order_id", "currentWorkOrderId", "work_order_id", "workOrderId", "task_id", "taskId"], "");
+  return firstField(row, ["当前工单编号", "执行工单编号", "current_work_order_id", "currentWorkOrderId", "work_order_id", "workOrderId", "task_id", "taskId"], "");
+}
+
+function activeDeviceCurrentWorkOrderId(row) {
+  const connection = deviceConnectionState(row);
+  const runtime = normalizeText(deviceRuntimeStatus(row));
+  if (connection === "offline" || runtime === "idle" || runtime === "空闲") return "";
+  return currentWorkOrderId(row);
 }
 
 function findWorkOrderForDevice(device, workOrders) {
-  const currentId = normalizeText(currentWorkOrderId(device));
+  const currentId = normalizeText(activeDeviceCurrentWorkOrderId(device));
   const deviceId = normalizeText(deviceIdentity(device));
   const title = normalizeText(deviceTitle(device));
 
@@ -4833,7 +4876,7 @@ function renderDeviceStatusPage() {
   const workstationRows = rows.filter(isWorkstationRow);
   const workstationTasks = workstationRows.map((device) => {
     const matchedOrder = findWorkOrderForDevice(device, workOrders);
-    return { device, order: matchedOrder, currentId: currentWorkOrderId(device) };
+    return { device, order: matchedOrder, currentId: activeDeviceCurrentWorkOrderId(device) };
   });
   const agvRows = rows.filter(isAgvRow);
   const agvTasks = [
@@ -4963,7 +5006,7 @@ function renderDeviceStatusPage() {
                         <div class="status-chip-set">${renderDeviceStateChips(row)}</div>
                       </div>
                       <div class="entity-fields">
-                        <span>当前任务</span><span>${escapeHtml(agvTaskId(row) || currentWorkOrderId(row) || "暂无运输任务")}</span>
+                        <span>当前任务</span><span>${escapeHtml(agvTaskId(row) || activeDeviceCurrentWorkOrderId(row) || "暂无运输任务")}</span>
                         <span>数据</span><span>${escapeHtml(row.__table)}</span>
                       </div>
                     </article>
@@ -5399,14 +5442,23 @@ function renderReportsPage() {
 
 function agentSuggestions() {
   return [
-    "生成产品生产分析报告，包含生产用时分布、产品-工序拓扑和各工序用时分析",
-    "检查当前产线是否存在设备、工单、库存或质检异常",
-    "物料追溯：根据贴标产品编号追溯物料批次、工单和质检记录",
+    "查看当前正在加工的订单",
+    "生产一个立方堆，用红色蓝色绿色立方体",
+    "检查一下设备的运行状态",
+  ];
+}
+
+function agentQuickActions() {
+  return [
+    {
+      label: "产品生产报告",
+      prompt: "生成产品生产分析报告，包含生产用时分布、产品-工序拓扑和各工序用时分析",
+      icon: "report",
+    },
   ];
 }
 
 function renderAgentConsole() {
-  const template = productionReportTemplate();
   const isOpen = state.agent.consoleOpen;
   return `
     <aside class="agent-console-overlay ${isOpen ? "open" : "collapsed"} ${state.sidebarCollapsed ? "sidebar-collapsed" : ""}" aria-label="产线管控 Agent 控制台">
@@ -5414,24 +5466,17 @@ function renderAgentConsole() {
         <button class="agent-console-tab" type="button" data-agent-console-toggle aria-expanded="${isOpen}">
           <div>
             <h2>产线管控Agent</h2>
-            <p class="panel-muted">底部控制台 · 当前页面保持可见</p>
           </div>
           <span class="status-chip ${state.agent.status === "error" ? "alarm" : state.agent.status === "busy" ? "idle" : "online"}">${agentStatusText()}</span>
           <b>${isOpen ? "收起" : "展开"}</b>
         </button>
         <div class="agent-console-panel">
           <section class="agent-console-chat">
-            <div class="agent-console-section-head">
-              <div>
-                <p class="panel-eyebrow">AI Agent</p>
-                <h3>智能问答</h3>
-              </div>
-              <button class="toolbar-btn" type="button" data-agent-console-toggle>关闭</button>
-            </div>
-          <div class="agent-capability-grid">
+            <button class="toolbar-btn agent-console-close" type="button" data-agent-console-toggle>关闭</button>
+          <div class="agent-suggestion-row">
               ${agentSuggestions().map((item) => `<button class="suggestion-chip agent-suggestion" type="button" data-agent-prompt="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}
           </div>
-          <div id="agent-chat-log" class="agent-chat-log">${renderAgentMessagesHtml()}</div>
+          <div id="agent-chat-log" class="agent-chat-log ${state.agent.messages.length ? "" : "empty"}">${renderAgentMessagesHtml()}</div>
           <form id="agent-form" class="agent-form">
               <textarea id="agent-input" class="agent-input" rows="3" placeholder="示例：请概括当前 ontology 中的仓库、订单、产线和库存预警信息"></textarea>
             <div class="agent-actions">
@@ -5440,49 +5485,14 @@ function renderAgentConsole() {
               <button id="agent-clear-btn" class="toolbar-btn" type="button">清空会话</button>
             </div>
           </form>
-          </section>
-          <section class="agent-console-context">
-            <div class="agent-console-section-head">
-              <div>
-                <p class="panel-eyebrow">Agent Reference</p>
-                <h3>能力参考</h3>
-              </div>
-              <span class="metric-pill">3 项能力</span>
-            </div>
-            <div class="agent-console-reference-grid">
-              <article class="entity-card compact-card">
-                <div class="entity-card-head">
-                  <div>
-                    <h3>产品生产分析报告</h3>
-                    <p class="panel-muted">基于 Data 订单工单历史生成生产用时分布、产品-工序拓扑和各工序用时分析。</p>
-                  </div>
-                  ${typeIconHtml("report", "产品生产分析报告")}
-                </div>
-                <div class="entity-fields">
-                  <span>模板</span><span>${escapeHtml(template ? template.title : "未配置")}</span>
-                  <span>Skill</span><span>${escapeHtml(template?.skillPath || "skills/product-production-analysis-report/SKILL.md")}</span>
-                </div>
-                <a class="toolbar-btn primary agent-reference-action" href="#/tools/reports">打开报告功能</a>
-              </article>
-              <article class="entity-card compact-card">
-                <div class="entity-card-head">
-                  <div>
-                    <h3>异常监测</h3>
-                    <p class="panel-muted">监测设备状态、工单状态、库存预警和质检异常，辅助定位产线运行风险。</p>
-                  </div>
-                  ${typeIconHtml("alert", "异常监测")}
-                </div>
-              </article>
-              <article class="entity-card compact-card">
-                <div class="entity-card-head">
-                  <div>
-                    <h3>物料追溯</h3>
-                    <p class="panel-muted">根据贴标产品编号关联产品、工单、物料批次、部件编码和质检记录。</p>
-                  </div>
-                  ${typeIconHtml("data", "物料追溯")}
-                </div>
-              </article>
-            </div>
+          <div class="agent-quick-actions">
+            ${agentQuickActions().map((item) => `
+              <button class="agent-quick-action agent-suggestion" type="button" data-agent-prompt="${escapeHtml(item.prompt)}">
+                ${typeIconHtml(item.icon, item.label)}
+                <span>${escapeHtml(item.label)}</span>
+              </button>
+            `).join("")}
+          </div>
           </section>
         </div>
       </div>
@@ -5510,14 +5520,34 @@ function renderAgentConsoleOverlay() {
   renderAgentMessages();
 }
 
+function ensureThemeSwitcherRoot() {
+  if (elements.themeSwitcherRoot) return elements.themeSwitcherRoot;
+  const root = document.createElement("div");
+  root.id = "theme-switcher-root";
+  document.body.appendChild(root);
+  elements.themeSwitcherRoot = root;
+  return root;
+}
+
+function renderThemeSwitcher() {
+  const root = ensureThemeSwitcherRoot();
+  root.innerHTML = `
+    <aside class="theme-switcher" aria-label="主题颜色配置">
+      <span>主题颜色</span>
+      <div class="theme-switcher-options">
+        <button class="${state.theme === "dark" ? "active" : ""}" type="button" data-theme-value="dark" aria-pressed="${state.theme === "dark"}">黑色</button>
+        <button class="${state.theme === "light" ? "active" : ""}" type="button" data-theme-value="light" aria-pressed="${state.theme === "light"}">白色</button>
+      </div>
+    </aside>
+  `;
+  root.querySelectorAll("[data-theme-value]").forEach((button) => {
+    button.addEventListener("click", () => setTheme(button.dataset.themeValue || "dark"));
+  });
+}
+
 function renderAgentMessagesHtml() {
   if (!state.agent.messages.length) {
-    return `
-      <article class="agent-message assistant">
-        <span class="agent-role">Agent</span>
-        <p>Agent console is connected to /api/chat.</p>
-      </article>
-    `;
+    return "";
   }
 
   return state.agent.messages
@@ -5533,6 +5563,7 @@ function renderAgentMessagesHtml() {
 function renderAgentMessages() {
   const log = document.querySelector("#agent-chat-log");
   if (!log) return;
+  log.classList.toggle("empty", !state.agent.messages.length);
   log.innerHTML = renderAgentMessagesHtml();
   log.scrollTop = log.scrollHeight;
 }
@@ -6165,10 +6196,12 @@ function initialize() {
     state.agent.consoleOpen = true;
     state.route = "/ontology/devices";
   }
+  applyTheme();
   elements.apiBaseInput.value = readStoredApiBase();
   renderShell();
   bindEvents();
   connectDigitalTwinEvents();
+  renderThemeSwitcher();
   renderPage();
   refreshData().catch(() => renderPage());
 }

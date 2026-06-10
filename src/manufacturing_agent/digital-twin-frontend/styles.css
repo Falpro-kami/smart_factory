@@ -17,6 +17,46 @@
   --red: #fb7185;
   --shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
   --radius: 20px;
+  --body-bg:
+    radial-gradient(circle at top left, rgba(124, 58, 237, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 20%),
+    linear-gradient(180deg, #0b0b11 0%, #090910 100%);
+  --sidebar-bg: linear-gradient(180deg, rgba(13, 13, 21, 0.98), rgba(9, 9, 16, 0.98));
+  --agent-bg: #0f172a;
+  --agent-soft: #111827;
+  --agent-muted-bg: #020617;
+  --agent-text: #f8fafc;
+  --agent-muted: #94a3b8;
+  --agent-border: rgba(148, 163, 184, 0.22);
+  --agent-suggestion-bg: #111827;
+  --agent-suggestion-hover: #1e293b;
+  --agent-user-bg: rgba(37, 99, 235, 0.24);
+  --agent-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f7fb;
+  --bg-soft: #ffffff;
+  --panel: rgba(255, 255, 255, 0.96);
+  --panel-strong: #ffffff;
+  --panel-muted: #f1f5f9;
+  --line: rgba(15, 23, 42, 0.12);
+  --line-strong: rgba(37, 99, 235, 0.24);
+  --text: #0f172a;
+  --muted: #64748b;
+  --shadow: 0 22px 58px rgba(15, 23, 42, 0.12);
+  --body-bg: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  --sidebar-bg: linear-gradient(180deg, #ffffff, #f8fafc);
+  --agent-bg: #ffffff;
+  --agent-soft: #f8fafc;
+  --agent-muted-bg: #f8fafc;
+  --agent-text: #0f172a;
+  --agent-muted: #64748b;
+  --agent-border: rgba(15, 23, 42, 0.14);
+  --agent-suggestion-bg: #f8fafc;
+  --agent-suggestion-hover: #e0f2fe;
+  --agent-user-bg: #e0f2fe;
+  --agent-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
 }
 
 * {
@@ -29,13 +69,11 @@ body {
   min-height: 100%;
   font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
   color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(124, 58, 237, 0.14), transparent 28%),
-    radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 20%),
-    linear-gradient(180deg, #0b0b11 0%, #090910 100%);
+  background: var(--body-bg);
 }
 
 body {
+  font-size: 17px;
   overflow-x: hidden;
 }
 
@@ -79,13 +117,294 @@ textarea {
   grid-template-columns: 76px minmax(0, 1fr);
 }
 
+.theme-switcher {
+  position: fixed;
+  z-index: 120;
+  left: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 10px;
+  width: 184px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.theme-switcher > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.theme-switcher-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.theme-switcher button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--panel-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.theme-switcher button:hover {
+  border-color: var(--line-strong);
+}
+
+.theme-switcher button.active {
+  color: #ffffff;
+  border-color: rgba(37, 99, 235, 0.72);
+  background: #2563eb;
+}
+
+:root[data-theme="light"] .ontology-card,
+:root[data-theme="light"] .panel-card,
+:root[data-theme="light"] .topology-panel,
+:root[data-theme="light"] .entity-card {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+:root[data-theme="light"] .ontology-card,
+:root[data-theme="light"] .brand-mark {
+  background: #eff6ff;
+}
+
+:root[data-theme="light"] .brand-block,
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .panel-divider,
+:root[data-theme="light"] .data-tree-children,
+:root[data-theme="light"] .order-tree-children,
+:root[data-theme="light"] .device-task-children,
+:root[data-theme="light"] .isa-folder-children {
+  border-color: var(--line);
+}
+
+:root[data-theme="light"] .sidebar-toggle,
+:root[data-theme="light"] .nav-section-toggle b,
+:root[data-theme="light"] .meta-pill,
+:root[data-theme="light"] .metric-pill,
+:root[data-theme="light"] .suggestion-chip,
+:root[data-theme="light"] .toolbar-btn,
+:root[data-theme="light"] .class-action-btn,
+:root[data-theme="light"] .segmented-control,
+:root[data-theme="light"] .segment-btn,
+:root[data-theme="light"] .entity-type-pill,
+:root[data-theme="light"] .class-count {
+  color: var(--text);
+  border-color: var(--line);
+  background: #f8fafc;
+}
+
+:root[data-theme="light"] .sidebar-toggle:hover,
+:root[data-theme="light"] .nav-link:hover,
+:root[data-theme="light"] .nav-link.active,
+:root[data-theme="light"] .mapped-instance-card:hover,
+:root[data-theme="light"] .device-history-device-card:hover,
+:root[data-theme="light"] .device-history-device-card.active,
+:root[data-theme="light"] .device-history-run-item:hover,
+:root[data-theme="light"] .device-history-run-item.active {
+  color: var(--text);
+  border-color: rgba(37, 99, 235, 0.32);
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08), var(--shadow);
+}
+
+:root[data-theme="light"] .nav-section-toggle,
+:root[data-theme="light"] .breadcrumb,
+:root[data-theme="light"] .topology-scale-readout,
+:root[data-theme="light"] .panel-subtitle,
+:root[data-theme="light"] .entity-list-table th,
+:root[data-theme="light"] .class-table th,
+:root[data-theme="light"] .isa-tree-toggle {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .ontology-select,
+:root[data-theme="light"] .api-control input,
+:root[data-theme="light"] .search-input,
+:root[data-theme="light"] .agent-input,
+:root[data-theme="light"] .topology-mode-select,
+:root[data-theme="light"] .report-search {
+  color: var(--text);
+  border-color: var(--line);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .topology-mode-select {
+  background:
+    linear-gradient(45deg, transparent 50%, rgba(15, 23, 42, 0.72) 50%) calc(100% - 22px) 17px / 7px 7px no-repeat,
+    linear-gradient(135deg, rgba(15, 23, 42, 0.72) 50%, transparent 50%) calc(100% - 16px) 17px / 7px 7px no-repeat,
+    #ffffff;
+}
+
+:root[data-theme="light"] .topology-mode-select option {
+  color: var(--text);
+  background: #ffffff;
+}
+
+:root[data-theme="light"] .panel-card,
+:root[data-theme="light"] .entity-card,
+:root[data-theme="light"] .data-tree-folder,
+:root[data-theme="light"] .data-tree-child,
+:root[data-theme="light"] .order-tree-folder,
+:root[data-theme="light"] .order-tree-child,
+:root[data-theme="light"] .device-task-folder,
+:root[data-theme="light"] .device-task-child,
+:root[data-theme="light"] .device-history-device-card,
+:root[data-theme="light"] .device-history-run-item,
+:root[data-theme="light"] .report-management-panel,
+:root[data-theme="light"] .report-card,
+:root[data-theme="light"] .report-viewer,
+:root[data-theme="light"] .report-visual-grid article,
+:root[data-theme="light"] .analysis-grid section,
+:root[data-theme="light"] .class-detail-panel,
+:root[data-theme="light"] .class-recycle-item,
+:root[data-theme="light"] .topology-instance-panel,
+:root[data-theme="light"] .isa-folder,
+:root[data-theme="light"] .isa-tree,
+:root[data-theme="light"] .timeline-item,
+:root[data-theme="light"] .search-history-item,
+:root[data-theme="light"] .device-node-visual,
+:root[data-theme="light"] .device-property-flow,
+:root[data-theme="light"] .property-data-card,
+:root[data-theme="light"] .agv-task-summary > div,
+:root[data-theme="light"] .agv-task-card,
+:root[data-theme="light"] .relation-clickable,
+:root[data-theme="light"] .mapped-instance-card,
+:root[data-theme="light"] .class-detail-relation {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+:root[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+:root[data-theme="light"] .entity-list-wrap,
+:root[data-theme="light"] .class-table-wrap,
+:root[data-theme="light"] .topology-panel,
+:root[data-theme="light"] .production-topology-scroll,
+:root[data-theme="light"] .graph-stage {
+  color: var(--text);
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+:root[data-theme="light"] .entity-list-table th,
+:root[data-theme="light"] .entity-list-table td,
+:root[data-theme="light"] .class-table th,
+:root[data-theme="light"] .class-table td,
+:root[data-theme="light"] .report-viewer-head,
+:root[data-theme="light"] .report-viewer-body table,
+:root[data-theme="light"] .report-viewer-body th,
+:root[data-theme="light"] .report-viewer-body td {
+  border-color: var(--line);
+}
+
+:root[data-theme="light"] .entity-list-table th,
+:root[data-theme="light"] .class-table th {
+  background: #f8fafc;
+}
+
+:root[data-theme="light"] .report-viewer-backdrop {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+:root[data-theme="light"] .report-viewer-body {
+  color: var(--text);
+}
+
+:root[data-theme="light"] .report-stacked-track,
+:root[data-theme="light"] .report-process-bar div,
+:root[data-theme="light"] .report-gantt-track,
+:root[data-theme="light"] .analysis-bar-track {
+  background: #e2e8f0;
+}
+
+:root[data-theme="light"] .report-donut span {
+  background: #ffffff;
+}
+
+:root[data-theme="light"] .graph-edge-label,
+:root[data-theme="light"] .topology-node,
+:root[data-theme="light"] .topology-empty-state,
+:root[data-theme="light"] .production-class-node,
+:root[data-theme="light"] .production-class-node.module-mapped:hover {
+  color: var(--text);
+  border-color: var(--line);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--line), var(--shadow);
+}
+
+:root[data-theme="light"] .node-copy strong {
+  color: var(--text);
+  text-shadow: none;
+}
+
+:root[data-theme="light"] .production-edge-label {
+  fill: #334155;
+  stroke: #ffffff;
+}
+
+:root[data-theme="light"] .isa-tree-toggle:hover,
+:root[data-theme="light"] .isa-leaf-node {
+  color: var(--text);
+  background: #eff6ff;
+}
+
+:root[data-theme="light"] .isa-branch-line {
+  background: var(--line);
+}
+
+:root[data-theme="light"] .process-flow b {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .process-flow-node strong,
+:root[data-theme="light"] .topology-jump-btn {
+  color: #0369a1;
+}
+
+:root[data-theme="light"] .topology-controls {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="light"] .topology-control-btn {
+  color: var(--text);
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+:root[data-theme="light"] .topology-control-btn:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: #eff6ff;
+}
+
+:root[data-theme="light"] .sidebar-section-title {
+  color: #64748b;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: 18px;
   padding: 18px 18px 22px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(13, 13, 21, 0.98), rgba(9, 9, 16, 0.98));
+  border-right: 1px solid var(--line);
+  background: var(--sidebar-bg);
   min-width: 0;
   transition: padding 0.22s ease;
 }
@@ -603,6 +922,22 @@ textarea {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.agent-actions {
+  align-items: center;
+}
+
+.agent-actions #agent-send-btn {
+  margin-left: auto;
+  color: #ffffff;
+  border-color: rgba(37, 99, 235, 0.9);
+  background: #2563eb;
+}
+
+.agent-actions #agent-send-btn:hover:not(:disabled) {
+  border-color: rgba(29, 78, 216, 0.95);
+  background: #1d4ed8;
 }
 
 .topology-workspace {
@@ -2288,7 +2623,7 @@ textarea {
 
 .agent-console-shell {
   display: grid;
-  gap: 10px;
+  gap: 0;
   pointer-events: auto;
 }
 
@@ -2300,12 +2635,16 @@ textarea {
   width: 100%;
   min-height: 58px;
   padding: 12px 16px;
-  border: 1px solid rgba(52, 211, 153, 0.32);
-  border-radius: 8px;
-  color: var(--text);
-  background: linear-gradient(135deg, rgba(13, 15, 24, 0.96), rgba(9, 10, 18, 0.92));
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--agent-border);
+  border-radius: 8px 8px 0 0;
+  color: var(--agent-text);
+  background: var(--agent-bg);
+  box-shadow: var(--agent-shadow);
   text-align: left;
+}
+
+.agent-console-tab .panel-muted {
+  color: var(--agent-muted);
 }
 
 .agent-console-tab h2 {
@@ -2313,25 +2652,31 @@ textarea {
 }
 
 .agent-console-tab b {
-  color: var(--cyan);
+  color: #0284c7;
   font-size: 0.86rem;
 }
 
 .agent-console-panel {
   display: grid;
-  grid-template-columns: minmax(260px, 0.86fr) minmax(360px, 1.14fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
-  max-height: min(52vh, 520px);
+  max-height: min(58vh, 560px);
   padding: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  background: rgba(9, 10, 18, 0.96);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
+  border: 1px solid var(--agent-border);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  color: var(--agent-text);
+  background: var(--agent-bg);
+  box-shadow: var(--agent-shadow);
 }
 
 .agent-console-overlay.collapsed .agent-console-panel {
   display: none;
+}
+
+.agent-console-overlay.collapsed .agent-console-tab {
+  border-radius: 8px;
 }
 
 .agent-console-context,
@@ -2351,6 +2696,40 @@ textarea {
 
 .agent-console-section-head h3 {
   font-size: 1rem;
+  color: var(--agent-text);
+}
+
+.agent-console-close {
+  justify-self: end;
+}
+
+.agent-console-panel .panel-eyebrow {
+  color: #0284c7;
+}
+
+.agent-console-panel .panel-muted {
+  color: var(--agent-muted);
+}
+
+.agent-suggestion-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agent-console-panel .suggestion-chip {
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--agent-text);
+  border-color: rgba(14, 165, 233, 0.28);
+  background: var(--agent-suggestion-bg);
+}
+
+.agent-console-panel .suggestion-chip:hover {
+  border-color: rgba(2, 132, 199, 0.55);
+  background: var(--agent-suggestion-hover);
 }
 
 .agent-console-reference-grid {
@@ -2369,11 +2748,13 @@ textarea {
 
 .agent-input {
   min-height: 112px;
-  color: var(--text);
+  color: var(--agent-text);
 }
 
 .agent-console-overlay .agent-input {
   min-height: 78px;
+  background: var(--agent-bg);
+  border-color: var(--agent-border);
 }
 
 .agent-form {
@@ -2388,9 +2769,9 @@ textarea {
   min-height: 260px;
   overflow: auto;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(8, 8, 14, 0.72);
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  background: var(--agent-muted-bg);
 }
 
 .agent-console-overlay .agent-chat-log {
@@ -2398,20 +2779,25 @@ textarea {
   max-height: min(24vh, 250px);
 }
 
+.agent-chat-log.empty {
+  display: none;
+}
+
 .agent-message {
   display: grid;
   gap: 8px;
   max-width: 86%;
   padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  color: var(--agent-text);
+  border: 1px solid var(--agent-border);
+  background: var(--agent-bg);
 }
 
 .agent-message.user {
   justify-self: end;
-  background: rgba(124, 58, 237, 0.18);
-  border-color: rgba(139, 92, 246, 0.32);
+  background: var(--agent-user-bg);
+  border-color: rgba(2, 132, 199, 0.25);
 }
 
 .agent-message.assistant {
@@ -2420,6 +2806,31 @@ textarea {
 
 .agent-message.error {
   border-color: rgba(251, 113, 133, 0.45);
+}
+
+.agent-quick-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.agent-quick-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  color: var(--agent-text);
+  background: var(--agent-suggestion-bg);
+  cursor: pointer;
+}
+
+.agent-quick-action:hover {
+  border-color: rgba(2, 132, 199, 0.55);
+  background: var(--agent-suggestion-hover);
 }
 
 .agent-message p {

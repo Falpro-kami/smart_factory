@@ -1014,8 +1014,7 @@ def ensure_store_product_schema(cursor: Any) -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS `product` (
-            `产品ID` BIGINT AUTO_INCREMENT PRIMARY KEY,
-            `产品编号` VARCHAR(64) NOT NULL UNIQUE,
+            `产品编号` VARCHAR(64) NOT NULL PRIMARY KEY,
             `产品名称` VARCHAR(128) NOT NULL,
             `所属订单号` VARCHAR(64) NOT NULL,
             `贴标编号` VARCHAR(64) NOT NULL,
@@ -1183,8 +1182,33 @@ def release_device_after_workorder_event(event: dict[str, Any], status: str) -> 
     }
     try:
         upsert_device_runtime(runtime_event, is_heartbeat=False)
+        clear_device_current_task(device_id, parse_event_time(runtime_event["timestamp"]))
     except Exception as exc:
         print(f"device release after work order event skipped: {exc}", file=sys.stderr, flush=True)
+
+
+def clear_device_current_task(device_id: str, event_time: datetime) -> None:
+    if not device_id:
+        return
+    if device_id == "AGV-001":
+        device_id = "DEV005"
+    with mysql_connection("device") as conn:
+        with conn.cursor() as cursor:
+            ensure_device_runtime_schema(cursor)
+            cursor.execute(
+                f"""
+                UPDATE {DEVICE_RUNTIME_TABLE}
+                SET
+                    `执行工单编号` = NULL,
+                    `工序编号` = NULL,
+                    `当前任务开始时间` = NULL,
+                    `运行状态` = CASE WHEN `连接状态` = 'offline' THEN '' ELSE 'idle' END,
+                    `更新时间` = %s
+                WHERE `设备编号` IN ({", ".join(["%s"] * len(device_id_values_for_table(device_id, DEVICE_RUNTIME_TABLE)))})
+                """,
+                (event_time, *device_id_values_for_table(device_id, DEVICE_RUNTIME_TABLE)),
+            )
+        conn.commit()
 
 
 def handle_workorder_status_changed(event: dict[str, Any]) -> None:
@@ -1221,6 +1245,8 @@ def handle_workorder_status_changed(event: dict[str, Any]) -> None:
             work_order = cursor.fetchone()
             if not work_order:
                 return
+            if finished:
+                clear_device_current_task(str(work_order.get("分配工站") or ""), event_time)
 
             cursor.execute(
                 """
