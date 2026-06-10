@@ -28,7 +28,7 @@ MESSAGE_TOPICS = [
     topic.strip()
     for topic in os.getenv(
         "DEVICE_AGENT_TOPICS",
-        os.getenv("DEVICE_WORKORDER_TOPIC", "WorkOrderDeliver"),
+        os.getenv("DEVICE_WORKORDER_TOPIC", "WorkOrderDeliver") + ",DeviceAgentCommand",
     ).split(",")
     if topic.strip()
 ]

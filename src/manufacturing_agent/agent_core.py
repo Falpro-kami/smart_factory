@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import asyncio
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -13,6 +14,9 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from pydantic import BaseModel, Field
+
+from device_agent_bridge import send_device_agent_command_sync
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -111,7 +115,31 @@ def build_pythonpath() -> str:
 
 def get_local_langchain_tools() -> list[StructuredTool]:
     """Load local non-MCP tools exposed by the repository."""
-    return []
+    class DeviceAgentCommandInput(BaseModel):
+        device_id: str = Field(description="目标设备 ID，例如 DEV002。")
+        instruction: str = Field(description="要转发给设备智能体执行或回答的自然语言指令。")
+        timeout_sec: int = Field(default=60, ge=1, le=600, description="等待设备智能体回复的秒数。")
+
+    async def send_device_agent_command(device_id: str, instruction: str, timeout_sec: int = 60) -> str:
+        result = await asyncio.to_thread(
+            send_device_agent_command_sync,
+            device_id=device_id,
+            instruction=instruction,
+            timeout_sec=timeout_sec,
+        )
+        return json.dumps(result, ensure_ascii=False, default=str)
+
+    return [
+        StructuredTool.from_function(
+            coroutine=send_device_agent_command,
+            name="send_device_agent_command",
+            description=(
+                "把自然语言指令转发给指定设备智能体，并等待设备智能体回复。"
+                "当用户要求某个设备执行操作、询问设备侧状态、或需要设备智能体判断时使用。"
+            ),
+            args_schema=DeviceAgentCommandInput,
+        )
+    ]
 
 
 class AgentRuntime:

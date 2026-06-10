@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
+from datetime import datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -20,6 +22,11 @@ ONLINE_POLL_INTERVAL_SEC = 1.0
 ADAPTER_URL = os.getenv("DEVICE_AGENT_ADAPTER_URL", "http://127.0.0.1:8765")
 INPUT_SOURCE = os.getenv("DEVICE_AGENT_INPUT_SOURCE", "production")
 VALID_INPUT_SOURCES = {"production", "debug"}
+ROCKETMQ_NAMESRV = os.getenv("ROCKETMQ_NAMESRV", "192.168.1.10:9876")
+DEVICE_ID = os.getenv("DEVICE_AGENT_TAG", "DEV002")
+REPLY_TOPIC = os.getenv("DEVICE_AGENT_REPLY_TOPIC", "DeviceAgentReply")
+REPLY_TAG = os.getenv("MANUFACTURING_AGENT_REPLY_TAG", "manufacturing_agent")
+REPLY_PRODUCER_GROUP = os.getenv("DEVICE_AGENT_REPLY_PRODUCER_GROUP", "device-agent-reply-producer")
 
 
 def build_options() -> ClaudeAgentOptions:
@@ -69,6 +76,19 @@ def print_assistant_text(message) -> bool:
     return printed
 
 
+def assistant_text_from_message(message) -> str:
+    parts: list[str] = []
+    for block in getattr(message, "content", []) or []:
+        if getattr(block, "type", None) == "text":
+            parts.append(str(block.text))
+
+    result = getattr(message, "result", None)
+    if result:
+        parts.append(str(result))
+
+    return "".join(parts)
+
+
 def print_help() -> None:
     print("调试输入模式下，可直接输入自然语言与设备智能体交互。")
     print("本地命令: /source 查看输入源, /help 帮助, exit 退出。")
@@ -90,7 +110,7 @@ def handle_cli_command(command: str) -> bool:
     return False
 
 
-def pop_online_message_from_adapter() -> str | None:
+def pop_online_message_from_adapter() -> dict | None:
     try:
         with urlopen(f"{ADAPTER_URL}/messages/next", timeout=2.0) as response:
             if response.status == 204:
@@ -108,11 +128,17 @@ def pop_online_message_from_adapter() -> str | None:
         work_order_id = work_order_id_from_payload(message)
         if work_order_id:
             set_status(work_order_id, "running", message)
-        return json.dumps(message, ensure_ascii=False, indent=2)
+        return {
+            "prompt": json.dumps(message, ensure_ascii=False, indent=2),
+            "payload": message,
+        }
 
     instruction = payload.get("instruction")
     if isinstance(instruction, str) and instruction.strip():
-        return instruction.strip()
+        return {
+            "prompt": instruction.strip(),
+            "payload": {"instruction": instruction.strip()},
+        }
     return None
 
 
@@ -131,22 +157,67 @@ def work_order_id_from_payload(payload: dict) -> str | None:
     return None
 
 
-async def wait_for_online_message() -> str | None:
+async def wait_for_online_message() -> dict | None:
     print(f"生产输入已启用，等待上层消息 adapter: {ADAPTER_URL}")
     while True:
-        message = pop_online_message_from_adapter()
-        if message:
-            print(f"上层: {message}")
-            return message
+        context = pop_online_message_from_adapter()
+        if context:
+            print(f"上层: {context['prompt']}")
+            return context
         await asyncio.sleep(ONLINE_POLL_INTERVAL_SEC)
 
     return None
 
 
-async def send_to_agent(client: ClaudeSDKClient, prompt: str) -> None:
+def publish_device_agent_reply(source_payload: dict, reply: str, status: str = "completed") -> bool:
+    request_id = str(source_payload.get("request_id") or "").strip()
+    if not request_id:
+        return False
+
+    try:
+        from rocketmq.client import Message, Producer
+    except Exception as exc:
+        print(f"[device-agent] rocketmq client unavailable: {exc}", file=sys.stderr)
+        return False
+
+    payload = {
+        "request_id": request_id,
+        "device_id": DEVICE_ID,
+        "status": status,
+        "reply": reply,
+        "source": "device_agent",
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    producer = Producer(REPLY_PRODUCER_GROUP)
+    producer.set_name_server_address(ROCKETMQ_NAMESRV)
+    try:
+        producer.start()
+        message = Message(REPLY_TOPIC)
+        message.set_tags(REPLY_TAG)
+        message.set_keys(request_id)
+        message.set_body(json.dumps(payload, ensure_ascii=False))
+        result = producer.send_sync(message)
+        print(
+            "[device-agent] reply sent "
+            f"topic={REPLY_TOPIC} tag={REPLY_TAG} request_id={request_id} "
+            f"msg_id={getattr(result, 'msg_id', '')}"
+        )
+        return True
+    except Exception as exc:
+        print(f"[device-agent] failed to send reply: {exc}", file=sys.stderr)
+        return False
+    finally:
+        try:
+            producer.shutdown()
+        except Exception:
+            pass
+
+
+async def send_to_agent(client: ClaudeSDKClient, prompt: str) -> str:
     await client.query(prompt)
     print("Claude: ", end="", flush=True)
     saw_partial_text = False
+    collected: list[str] = []
     async for message in client.receive_response():
         event = getattr(message, "event", None)
         if isinstance(event, dict):
@@ -154,13 +225,18 @@ async def send_to_agent(client: ClaudeSDKClient, prompt: str) -> None:
             if text:
                 print(text, end="", flush=True)
                 saw_partial_text = True
+                collected.append(text)
             continue
 
         if not saw_partial_text:
-            print_assistant_text(message)
+            text = assistant_text_from_message(message)
+            if text:
+                print(text, end="" if text.endswith("\n") else "\n")
+                collected.append(text)
 
     if saw_partial_text:
         print()
+    return "".join(collected).strip()
 
 
 async def main() -> int:
@@ -195,16 +271,23 @@ async def main() -> int:
 
                 if handle_cli_command(prompt):
                     continue
+                context = {"prompt": prompt, "payload": {}}
             else:
-                prompt = await wait_for_online_message()
-                if prompt is None:
+                context = await wait_for_online_message()
+                if context is None:
                     continue
+                prompt = str(context.get("prompt") or "")
 
             if client is None:
                 client = ClaudeSDKClient(options=build_options())
                 await client.connect()
 
-            await send_to_agent(client, prompt)
+            try:
+                reply = await send_to_agent(client, prompt)
+                publish_device_agent_reply(context.get("payload") or {}, reply, "completed")
+            except Exception as exc:
+                publish_device_agent_reply(context.get("payload") or {}, str(exc), "failed")
+                raise
     finally:
         if client is not None:
             await client.disconnect()

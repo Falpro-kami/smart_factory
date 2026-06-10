@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { font: 700 48px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #1f334d; }
+      .subtitle { font: 400 23px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #5d6e84; }
+      .section-title { font: 600 28px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #2b405a; }
+      .side-title { font: 600 30px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #1f334d; }
+      .topic-title { font: 700 30px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #ffffff; }
+      .topic-text { font: 400 20px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #f2f6fb; }
+      .body { font: 400 21px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #4f6178; }
+      .meta { font: 400 18px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #5d6e84; }
+      .label { font: 500 20px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #365f93; }
+      .footer { font: 400 20px "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif; fill: #4f6178; }
+
+      .panel { fill: #ffffff; stroke: #d6deea; stroke-width: 1.5; }
+      .prod { fill: #edf3fa; stroke: #6685aa; stroke-width: 2; }
+      .dev { fill: #fff6ea; stroke: #ad7e42; stroke-width: 2; }
+      .topic { fill: #4478b7; stroke: #2c5f9e; stroke-width: 2; }
+      .topic2 { fill: #4e8f70; stroke: #357258; stroke-width: 2; }
+      .topic3 { fill: #7162a8; stroke: #57478f; stroke-width: 2; }
+      .arrow { stroke: #365f93; stroke-width: 3.5; fill: none; marker-end: url(#arrowBlue); }
+      .arrow-green { stroke: #4e7f67; stroke-width: 3.5; fill: none; marker-end: url(#arrowGreen); }
+      .arrow-purple { stroke: #685995; stroke-width: 3.5; fill: none; marker-end: url(#arrowPurple); }
+      .divider { stroke: #d6deea; stroke-width: 1.5; }
+    </style>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#365f93"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#4e7f67"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#685995"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1920" height="1080"/>
+
+  <text class="title" x="90" y="96">RocketMQ Topic 通信关系</text>
+  <text class="subtitle" x="92" y="138">围绕生产侧与设备侧的工单下发、设备事件上报、智能体对话请求-响应</text>
+
+  <!-- Side panels -->
+  <rect class="panel" x="90" y="205" width="420" height="680" rx="10"/>
+  <rect class="panel" x="1410" y="205" width="420" height="680" rx="10"/>
+  <text class="side-title" x="230" y="265">生产侧</text>
+  <text class="body" x="160" y="315">生产智能体 / 调度器</text>
+  <text class="body" x="160" y="350">状态同步服务</text>
+
+  <text class="side-title" x="1550" y="265">设备侧</text>
+  <text class="body" x="1490" y="315">设备 Adapter</text>
+  <text class="body" x="1490" y="350">设备智能体 / 执行器</text>
+
+  <!-- Topic cards -->
+  <text class="section-title" x="820" y="230">Topic</text>
+
+  <rect class="topic" x="690" y="280" width="540" height="115" rx="8"/>
+  <text class="topic-title" x="835" y="330">WorkOrderDeliver</text>
+  <text class="topic-text" x="790" y="365">下发工单与执行参数</text>
+
+  <rect class="topic2" x="690" y="455" width="540" height="125" rx="8"/>
+  <text class="topic-title" x="830" y="505">DeviceEventReport</text>
+  <text class="topic-text" x="735" y="540">上报设备状态、工单状态、设备心跳</text>
+
+  <rect class="topic3" x="690" y="650" width="250" height="110" rx="8"/>
+  <text class="topic-title" x="715" y="700">DeviceAgentCommand</text>
+  <text class="topic-text" x="725" y="735">生产侧发起对话/操作</text>
+
+  <rect class="topic3" x="980" y="650" width="250" height="110" rx="8"/>
+  <text class="topic-title" x="1015" y="700">DeviceAgentReply</text>
+  <text class="topic-text" x="1015" y="735">设备智能体返回结果</text>
+
+  <!-- Work order delivery arrows -->
+  <path class="arrow" d="M510 337 H690"/>
+  <path class="arrow" d="M1230 337 H1410"/>
+  <text class="label" x="545" y="315">生产 → Topic</text>
+  <text class="label" x="1260" y="315">Topic → 设备</text>
+
+  <!-- Device event arrows -->
+  <path class="arrow-green" d="M1410 518 H1230"/>
+  <path class="arrow-green" d="M690 518 H510"/>
+  <text class="label" x="1260" y="496">设备 → Topic</text>
+  <text class="label" x="530" y="496">Topic → 生产</text>
+
+  <!-- Device agent command/reply arrows -->
+  <path class="arrow-purple" d="M510 705 H690"/>
+  <path class="arrow-purple" d="M940 705 H1410"/>
+  <text class="label" x="530" y="682">请求</text>
+
+  <path class="arrow-purple" d="M1410 740 H1230"/>
+  <path class="arrow-purple" d="M980 740 H510"/>
+  <text class="label" x="1260" y="775">回复</text>
+
+  <!-- Meta information -->
+  <rect class="panel" x="90" y="910" width="1740" height="105" rx="8"/>
+  <text class="footer" x="125" y="948">Tag 规则：面向设备的消息使用设备 ID 作为 Tag，例如 DEV002；生产侧消费设备事件默认使用 *；设备智能体回复使用 manufacturing_agent。</text>
+  <text class="footer" x="125" y="982">Key 规则：工单下发使用 work_order_id；设备状态使用 device_id；设备智能体对话使用 request_id，用于请求与回复关联。</text>
+</svg>
