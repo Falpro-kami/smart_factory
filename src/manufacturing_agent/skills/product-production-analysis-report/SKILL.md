@@ -53,7 +53,7 @@ Use this pattern:
 ```cypher
 MATCH (s)
 WHERE any(label IN labels(s) WHERE toLower(label) = 'assemblystep')
-WITH s, coalesce(s.stepId, s.order, s.name, s.process_name, 0) AS sort_key
+WITH s, coalesce(s.stepId, s.name, 0) AS sort_key
 RETURN elementId(s) AS step_node_id, properties(s) AS step_props
 ORDER BY sort_key
 ```

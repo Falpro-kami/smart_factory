@@ -1,0 +1,213 @@
+{
+  "order": {
+    "order_id": "PO-20260421-001",
+    "product_id": "PD-CUBE-STACK",
+    "product_name": "立方堆",
+    "quantity": 1
+  },
+  "items": [
+    {
+      "item_no": 1,
+      "work_orders": [
+        {
+          "sequence": 1,
+          "工单类型": "出库",
+          "工序编号": "OUTPUT-001",
+          "工单名称": "出库工序",
+          "分配设备": "DEV001",
+          "起始设备": "DEV001",
+          "目标设备": "DEV001",
+          "description": "从立体仓库出库生产所需立方体部件。",
+          "input_materials": [
+            {
+              "material_type": "立方体",
+              "quantity": 3
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方体",
+              "quantity": 3
+            }
+          ]
+        },
+        {
+          "sequence": 2,
+          "工单类型": "运输",
+          "工序编号": "AGV-TRANSPORT",
+          "工单名称": "物料运输",
+          "分配设备": "DEV005",
+          "起始设备": "DEV001",
+          "目标设备": "DEV002",
+          "description": "将物料从 DEV001 运输到 DEV002。",
+          "input_materials": [
+            {
+              "material_type": "立方体",
+              "quantity": 3
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方体",
+              "quantity": 3
+            }
+          ]
+        },
+        {
+          "sequence": 3,
+          "工单类型": "加工",
+          "工序编号": "PROC-001",
+          "工单名称": "堆积工序",
+          "分配设备": "DEV002",
+          "起始设备": "DEV002",
+          "目标设备": "DEV002",
+          "description": "将立方体部件堆积形成产品主体。",
+          "input_materials": [
+            {
+              "material_type": "立方体",
+              "quantity": 3
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "sequence": 4,
+          "工单类型": "运输",
+          "工序编号": "AGV-TRANSPORT",
+          "工单名称": "物料运输",
+          "分配设备": "DEV005",
+          "起始设备": "DEV002",
+          "目标设备": "DEV003",
+          "description": "将物料从 DEV002 运输到 DEV003。",
+          "input_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "sequence": 5,
+          "工单类型": "质检",
+          "工序编号": "DETECT-001",
+          "工单名称": "质检工序",
+          "分配设备": "DEV003",
+          "起始设备": "DEV003",
+          "目标设备": "DEV003",
+          "description": "对立方堆成品进行质量检查。",
+          "input_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "sequence": 6,
+          "工单类型": "运输",
+          "工序编号": "AGV-TRANSPORT",
+          "工单名称": "物料运输",
+          "分配设备": "DEV005",
+          "起始设备": "DEV003",
+          "目标设备": "DEV004",
+          "description": "将物料从 DEV003 运输到 DEV004。",
+          "input_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "sequence": 7,
+          "工单类型": "贴标",
+          "工序编号": "LABEL-001",
+          "工单名称": "贴标工序",
+          "分配设备": "DEV004",
+          "起始设备": "DEV004",
+          "目标设备": "DEV004",
+          "description": "对质检合格产品进行贴标。",
+          "input_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "sequence": 8,
+          "工单类型": "运输",
+          "工序编号": "AGV-TRANSPORT",
+          "工单名称": "物料运输",
+          "分配设备": "DEV005",
+          "起始设备": "DEV004",
+          "目标设备": "DEV001",
+          "description": "将物料从 DEV004 运输到 DEV001。",
+          "input_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "sequence": 9,
+          "工单类型": "入库",
+          "工序编号": "INPUT-001",
+          "工单名称": "入库工序",
+          "分配设备": "DEV001",
+          "起始设备": "DEV001",
+          "目标设备": "DEV001",
+          "description": "将贴标后的成品放入立体仓库。",
+          "input_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ],
+          "output_materials": [
+            {
+              "material_type": "立方堆",
+              "quantity": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

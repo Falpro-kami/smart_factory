@@ -1,6 +1,6 @@
 ﻿# 数字孪生 Ontology 前端
 
-`digital-twin-frontend/` 是 manufacturing_agent 的轻量前端控制台，使用原生 HTML、CSS 和 ES Modules 构建。页面用于展示智能产线 ontology、本体类拓扑、设备/订单/物料/产品/工艺实例、设备状态、历史数据、报告模板以及产线管控 Agent 会话。
+`digital-twin-frontend/` 是 manufacturing_agent 的轻量前端控制台，使用原生 HTML、CSS 和 ES Modules 构建。页面用于展示智能产线 ontology、本体类拓扑、设备/订单/物料/产品/工序实例、设备状态、历史数据、报告模板以及产线管控 Agent 会话。
 
 ## 端口约定
 
@@ -42,12 +42,12 @@ http://127.0.0.1:5175
 
 ## 功能概览
 
-- `Ontology / Classes`：查看智能产线本体类拓扑，支持本体类、产品-工序、设备-工艺等视图。
+- `Ontology / Classes`：查看智能产线本体类拓扑，支持本体类、产品-工序、设备-工序能力等视图。
 - `Ontology / Relations`：查看和维护本体类之间的关系定义；推理规则不在 Relations 中展示。
 - `Ontology / Devices`：查看设备实例和设备当前任务；当前任务只包含正在执行或等待执行的工站工单与 AGV 运输任务。
 - `Ontology / Orders`：查看未整单结束的订单与拆分工单；部分工单已完成时仍保留在该订单下并更新工单状态。
-- `Ontology / Materials`、`Products`、`Crafts`、`Processes`：查看对应实体实例列表和属性视图。
-- `Tools / Global Search`：跨设备、订单、工单、物料、产品、工序和工艺统一检索，支持关键词、ID 或部分名称模糊匹配，并可按对象类型、状态、所属工站或工序过滤；结果可跳转到对应属性视图或拓扑图，查询行为会保存在页面 History 区域。
+- `Ontology / Materials`、`Products`、`Processes`：查看对应实体实例列表和属性视图。
+- `Tools / Global Search`：跨设备、订单、工单、物料、产品和工序统一检索，支持关键词、ID 或部分名称模糊匹配，并可按对象类型、状态、所属工站或工序过滤；结果可跳转到对应属性视图或拓扑图，查询行为会保存在页面 History 区域。
 - `Tools / Reasoning Rules`：查看 ontology 推理规则参考模板和后端 `reasoning_service` 返回的实时规则，供产线管控 Agent 解释工单拆分、设备匹配、AGV 任务和异常判断时参考。
 - `Tools / Reports`：查看和生成生产分析报告。
 - `AI Agent / Production Agent`：打开全局底部 Agent 控制台，通过后端 `POST /api/chat` 与产线管控 Agent 交互；控制台浮在当前模块上方，不替换主内容页面，Agent 可参考 `Tools / Reasoning Rules` 的推理规则和 `Tools / Reports` 的报告模板。
@@ -137,7 +137,7 @@ reasoning_service/
 
 - 产品工艺推理：产品通过 `HAS_STEP` 找到工艺流程和工艺步骤。
 - 工单拆分推理：订单按产品工艺流程拆分为多个工单。
-- 设备匹配推理：工艺根据 `CAN_EXECUTE` 匹配可执行设备。
+- 设备匹配推理：工序根据 `CAN_RUN_ON` 匹配可执行设备，并按产品区分能力。
 - AGV 任务推理：首道工序、相邻工单设备不同或末道入库时生成运输任务。
 - 库存约束推理：需求数量大于库存或缺少物料批次时不允许执行。
 - 质量规则推理：质检不合格进入返工或异常判断。
@@ -182,7 +182,7 @@ created_at
 8. 点击任意设备卡片，右侧或下方应显示该设备的运行条目列表。
 9. 点击任意运行条目，详情区应显示运行时间、负载、运输路径或来源，并显示对应任务与相关订单信息。
 10. 进入 `Tools / Reasoning Rules`，应显示推理规则参考卡片，包含触发条件、推理结论和规则来源。
-11. 进入 `Tools / Global Search`，输入设备、订单、工单、物料、产品、工序或工艺关键词，确认结果表按名称、编号、类型、状态展示；切换对象类型、状态、工站或工序筛选后结果应实时更新。
+11. 进入 `Tools / Global Search`，输入设备、订单、工单、物料、产品或工序关键词，确认结果表按名称、编号、类型、状态展示；切换对象类型、状态、工站或工序筛选后结果应实时更新。
 12. 点击任意搜索结果的 `属性视图`，应跳转到对应模块并打开实例属性；点击 `拓扑图`，应跳转到 `Ontology / Classes` 的相关拓扑视图。
 13. 在 `Tools / Global Search` 提交检索后，页面右侧 `History` 区域应记录查询词、对象类型和结果数量；点击历史记录应恢复查询条件。
 14. 进入 `Tools / Reports`，应显示报告模板与生成报告；Tools 中不再显示 `Device Status` 和 `History`。

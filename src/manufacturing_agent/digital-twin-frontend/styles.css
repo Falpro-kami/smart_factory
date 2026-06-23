@@ -122,48 +122,40 @@ textarea {
   z-index: 120;
   left: 16px;
   bottom: 16px;
-  display: grid;
-  gap: 10px;
-  width: 184px;
-  padding: 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  color: var(--text);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   background: var(--panel-strong);
   box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
 }
 
-.theme-switcher > span {
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 700;
+.theme-dot {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
-.theme-switcher-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+.theme-dot.dark {
+  background: #0b0b11;
 }
 
-.theme-switcher button {
-  min-height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  color: var(--text);
-  background: var(--panel-muted);
-  font-size: 0.9rem;
-  font-weight: 700;
+.theme-dot.light {
+  background: #f5f7fb;
 }
 
-.theme-switcher button:hover {
-  border-color: var(--line-strong);
+.theme-dot:hover,
+.theme-dot.active {
+  border-color: #2563eb;
 }
 
-.theme-switcher button.active {
-  color: #ffffff;
-  border-color: rgba(37, 99, 235, 0.72);
-  background: #2563eb;
+.theme-dot.active {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
 :root[data-theme="light"] .ontology-card,

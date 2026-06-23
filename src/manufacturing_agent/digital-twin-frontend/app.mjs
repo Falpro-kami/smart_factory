@@ -21,13 +21,13 @@ const AGENT_SESSION_ID = "digital-twin-ontology-only";
 const CLASS_NODE_WIDTH = 220;
 const CLASS_NODE_HEIGHT = 116;
 const MYSQL_ENTITY_TYPES = new Set(["device", "material", "order", "work_order"]);
-const ENTITY_LIST_REFRESH_TYPES = ["order", "work_order", "product", "process", "craft"];
-const GLOBAL_SEARCH_ENTITY_TYPES = ["device", "order", "work_order", "material", "product", "process", "craft"];
+const ENTITY_LIST_REFRESH_TYPES = ["order", "work_order", "product", "process"];
+const GLOBAL_SEARCH_ENTITY_TYPES = ["device", "order", "work_order", "material", "product", "process"];
 const DEVICE_STATUS_NAME_ALIASES = new Map();
 const TOPOLOGY_MODES = [
   { key: "production", label: "本体类拓扑", description: "查看智能产线本体类之间的完整拓扑关系。" },
   { key: "product-process", label: "产品 - 工序", description: "查看产品、工序、输入物料和输出部件之间的拓扑关系。" },
-  { key: "device-craft", label: "设备 - 工艺", description: "查看设备与工艺能力之间的拓扑关系。" },
+  { key: "device-process", label: "设备 - 工序能力", description: "按产品查看设备可执行的工序能力。" },
 ];
 const REASONING_RULE_TEMPLATES = [
   {
@@ -49,8 +49,8 @@ const REASONING_RULE_TEMPLATES = [
   {
     id: "RULE-DEVICE-ASSIGNMENT",
     title: "设备匹配推理",
-    summary: "工艺根据 CAN_EXECUTE 匹配可执行设备，并检查设备是否存在于 ontology 设备目录。",
-    condition: "Craft CAN_EXECUTE Device，Device 在线且非故障/维护",
+    summary: "工序根据 CAN_RUN_ON 匹配可执行设备，并检查设备是否存在于 ontology 设备目录。",
+    condition: "Product HAS_STEP Process，Process CAN_RUN_ON Device，Device 在线且非故障/维护",
     conclusion: "返回可分配设备或违规原因",
     source: "device_reasoner.py",
   },
@@ -100,14 +100,12 @@ const ENTITY_META = {
   material: { title: "物料", route: "/ontology/materials", entityType: "material" },
   product: { title: "产品", route: "/ontology/products", entityType: "product" },
   process: { title: "工序", route: "/ontology/processes", entityType: "process" },
-  craft: { title: "工艺", route: "/ontology/crafts", entityType: "craft" },
 };
 const ENTITY_LIST_COPY = {
   device: "查看设备实例列表，选择任意行后可在下方查看完整属性。",
   material: "查看物料与库存实例，选择任意行后可在下方查看完整属性。",
   product: "查看产品定义与工艺模板实例，选择任意行后可在下方查看完整属性。",
   process: "查看产品工序节点、物料使用和部件产出实例，选择任意行后可在下方查看完整属性。",
-  craft: "查看工艺流程、能力关系和工艺属性实例，选择任意行后可在下方查看完整属性。",
 };
 const PROPERTY_FIELD_LABELS = {
   id: "ID",
@@ -129,7 +127,6 @@ const TYPE_ICON_META = {
   store_product: { label: "PR", tone: "green" },
   product: { label: "PD", tone: "yellow" },
   process: { label: "PR", tone: "green" },
-  craft: { label: "CF", tone: "violet" },
   part: { label: "PT", tone: "amber" },
   class: { label: "CL", tone: "violet" },
   relation: { label: "RL", tone: "blue" },
@@ -141,16 +138,15 @@ const TYPE_ICON_META = {
   agent: { label: "AI", tone: "green" },
 };
 
-const EMPTY_CATALOGS = { device: [], order: [], work_order: [], material: [], product: [], process: [], craft: [] };
-const LIST_CLASS_NODE_IDS = new Set(["user", "order", "work-order", "workstation", "product", "craft", "process", "warehouse", "material", "agv"]);
+const EMPTY_CATALOGS = { device: [], order: [], work_order: [], material: [], product: [], process: [] };
+const LIST_CLASS_NODE_IDS = new Set(["user", "order", "work-order", "workstation", "product", "process", "warehouse", "material", "agv"]);
 const CLASS_TOPOLOGY_NODES = [
   { id: "user", entityType: "class", label: "User", en: "User", tone: "violet", x: 25, y: 55 },
   { id: "order", entityType: "order", label: "Order", moduleType: "order", tone: "pink", x: 360, y: 55 },
   { id: "work-order", entityType: "work_order", label: "Work_order", moduleType: "work_order", tone: "red", x: 800, y: 55 },
     { id: "workstation", entityType: "device", label: "Workstation", moduleType: "device", keywords: ["workstation", "station"], tone: "cyan", x: 1330, y: 55 },
   { id: "product", entityType: "product", label: "Product", moduleType: "product", tone: "yellow", x: 360, y: 330 },
-  { id: "craft", entityType: "craft", label: "Craft", en: "Craft", moduleType: "craft", tone: "violet", x: 800, y: 330 },
-  { id: "process", entityType: "process", label: "Process", moduleType: "process", tone: "green", x: 1330, y: 330 },
+  { id: "process", entityType: "process", label: "Process", moduleType: "process", tone: "green", x: 800, y: 330 },
     { id: "warehouse", entityType: "device", label: "Warehouse", moduleType: "device", keywords: ["warehouse"], tone: "cyan", x: 760, y: 575 },
     { id: "material", entityType: "material", label: "Material", moduleType: "material", keywords: ["material"], tone: "yellow", x: 1330, y: 575 },
     { id: "agv", entityType: "device", label: "AGV", moduleType: "device", keywords: ["AGV", "agv"], tone: "pink", x: 360, y: 670 },
@@ -161,7 +157,7 @@ const CLASS_TOPOLOGY_EDGES = [
   { source: "work-order", target: "workstation", label: "assigned to" },
   { source: "order", target: "product", label: "produces" },
   { source: "product", target: "process", label: "has_step" },
-  { source: "workstation", target: "craft", label: "can_execute" },
+  { source: "workstation", target: "process", label: "can_run_on" },
   { source: "warehouse", target: "material", label: "stores" },
   { source: "agv", target: "material", label: "transports" },
   { source: "material", target: "workstation", label: "supplied to" },
@@ -176,7 +172,7 @@ const state = {
   instanceGraph: { nodes: [], edges: [] },
   neoTopologies: {},
   catalogs: { ...EMPTY_CATALOGS },
-  ontologySearch: { device: "", order: "", work_order: "", material: "", product: "", process: "", craft: "", classes: "", relations: "" },
+  ontologySearch: { device: "", order: "", work_order: "", material: "", product: "", process: "", classes: "", relations: "" },
   globalSearch: {
     query: "",
     entityType: "all",
@@ -214,6 +210,7 @@ const state = {
     threadId: "ontology-production-agent-frontend-only",
     status: "ready",
     consoleOpen: false,
+    draft: "",
   },
   loading: false,
 };
@@ -314,11 +311,6 @@ function readStoredClassState() {
   try {
     const data = JSON.parse(localStorage.getItem(CLASS_STORAGE_KEY) || "{}");
     const overrides = data.overrides && typeof data.overrides === "object" ? data.overrides : {};
-    if (overrides.craft?.deleted === true) {
-      overrides.craft = { ...overrides.craft };
-      delete overrides.craft.deleted;
-      localStorage.setItem(CLASS_STORAGE_KEY, JSON.stringify({ ...data, overrides }));
-    }
     return {
       customClasses: Array.isArray(data.customClasses) ? data.customClasses : [],
       customRelations: Array.isArray(data.customRelations) ? data.customRelations : [],
@@ -424,7 +416,6 @@ function navIconType(item) {
   if (route.includes("/materials")) return "material";
   if (route.includes("/products")) return "product";
   if (route.includes("/processes")) return "process";
-  if (route.includes("/crafts")) return "craft";
   if (route.includes("/classes")) return "class";
   if (route.includes("/relations")) return "relation";
   if (route.includes("/search")) return "search";
@@ -480,7 +471,7 @@ function mysqlCatalogItem(entityType, row, index) {
 function deviceCatalogIdentity(row, index) {
   const subtype = deviceSubtype(row);
   if (subtype === "agv") {
-    return firstField(row, ["AGV编号", "agv_id", "agvId", "小车编号", "vehicle_id", "vehicleId", "transport_device_id", "code"], `${row.__table}:${index}`);
+    return firstField(row, ["设备编号", "设备ID", "deviceCode", "device_code", "device_id", "deviceId", "AGV编号", "agv_id", "agvId", "小车编号", "vehicle_id", "vehicleId", "transport_device_id", "code"], `${row.__table}:${index}`);
   }
   return firstField(row, ["设备编号", "设备ID", "deviceCode", "device_code", "device_id", "deviceId", "workstation_id", "workstationId", "station_id", "stationId", "code"], `${row.__table}:${index}`);
 }
@@ -557,7 +548,7 @@ function buildFallbackOntology() {
     name: "智能产线 Ontology",
     version: "live",
     status: "Live",
-    description: "基于 Neo4j 产品/工艺图与 MySQL 运行态数据构建的实时智能产线本体",
+    description: "基于 Neo4j 产品工序图与 MySQL 运行态数据构建的实时智能产线本体",
   };
 }
 
@@ -1251,8 +1242,8 @@ function activeTopologyEdges() {
 }
 
 function activeNeoTopology() {
-  const aliases = { "device-craft": "device-process" };
-  const topology = state.neoTopologies[state.classTopologyMode] || state.neoTopologies[aliases[state.classTopologyMode]] || { nodes: [], edges: [] };
+  const topologyKey = state.neoTopologies[state.classTopologyMode] ? state.classTopologyMode : "device-process";
+  const topology = state.neoTopologies[topologyKey] || state.neoTopologies["device-process"] || state.neoTopologies["product-process"] || { nodes: [], edges: [] };
   return {
     ...topology,
     edges: (topology.edges || [])
@@ -1594,7 +1585,6 @@ function topologyNodeTypeLabel(node) {
   if (semantic === "material") return "Material";
   if (semantic === "part") return "Part";
   if (semantic === "device") return "Device";
-  if (semantic === "craft") return "Craft";
   return node?.entityType || "Entity";
 }
 
@@ -1652,7 +1642,7 @@ function renderSelectedTopologyInstancePanel() {
           <div>
             <p class="panel-eyebrow">Instance</p>
             <h3>未选择实例</h3>
-            <p class="panel-muted">选择左侧产品、设备或工艺实例后查看对应局部结构</p>
+            <p class="panel-muted">选择左侧产品、设备或工序实例后查看对应局部结构</p>
           </div>
         </div>
       </aside>
@@ -2012,8 +2002,8 @@ function edgeLaneOffsets(edges, step = 40) {
 }
 
 function withEdgeLanes(edges, mode = "production") {
-  const laneStep = mode === "device-craft" ? 28 : 40;
-  const labelStep = mode === "device-craft" ? 10 : 14;
+  const laneStep = mode === "device-process" ? 28 : 40;
+  const labelStep = mode === "device-process" ? 10 : 14;
   const offsets = edgeLaneOffsets(edges, laneStep);
   return edges.map((edge, index) => ({
     ...edge,
@@ -2401,8 +2391,6 @@ function topologyNodeSemanticType(node) {
   if (entityType === "material") return "material";
   if (entityType === "part") return "part";
   if (entityType === "device") return "device";
-  if (entityType === "craft") return "craft";
-  if (text.includes("craft")) return "craft";
   if (text.includes("device") || text.includes("workstation") || text.includes("station") || text.includes("warehouse") || text.includes("agv")) return "device";
   if (text.includes("processinstance") || text.includes("assemblystep") || text.includes("process")) return "process";
   if (text.includes("product")) return "product";
@@ -2446,10 +2434,11 @@ function layoutNeoTopologyNodes(topology, nodes, mode = state.classTopologyMode)
     ];
   }
 
-  if (mode === "device-craft") {
+  if (mode === "device-process") {
+    const products = nodes.filter((node) => topologyNodeSemanticType(node) === "product");
+    const processes = nodes.filter((node) => topologyNodeSemanticType(node) === "process");
     const devices = nodes.filter((node) => topologyNodeSemanticType(node) === "device");
-    const crafts = nodes.filter((node) => topologyNodeSemanticType(node) === "craft");
-    const others = nodes.filter((node) => !devices.includes(node) && !crafts.includes(node));
+    const others = nodes.filter((node) => !products.includes(node) && !processes.includes(node) && !devices.includes(node));
     const ranked = (items) => new Map(items.map((node, index) => [node.id, index]));
     const averagePeerRank = (nodeId, direction, peerRanks) => {
       const peers = edges
@@ -2459,19 +2448,20 @@ function layoutNeoTopologyNodes(topology, nodes, mode = state.classTopologyMode)
       if (!peers.length) return Number.MAX_SAFE_INTEGER;
       return peers.reduce((sum, id) => sum + peerRanks.get(id), 0) / peers.length;
     };
-    const baseCrafts = [...crafts].sort(sortByTraffic);
-    const craftRanks = ranked(baseCrafts);
-    const orderedDevices = [...devices].sort(
-      (a, b) => averagePeerRank(a.id, "source", craftRanks) - averagePeerRank(b.id, "source", craftRanks) || sortByTraffic(a, b)
+    const orderedProducts = [...products].sort(sortByTraffic);
+    const productRanks = ranked(orderedProducts);
+    const orderedProcesses = [...processes].sort(
+      (a, b) => averagePeerRank(a.id, "target", productRanks) - averagePeerRank(b.id, "target", productRanks) || sortByTraffic(a, b)
     );
-    const deviceRanks = ranked(orderedDevices);
-    const orderedCrafts = [...crafts].sort(
-      (a, b) => averagePeerRank(a.id, "target", deviceRanks) - averagePeerRank(b.id, "target", deviceRanks) || sortByTraffic(a, b)
+    const processRanks = ranked(orderedProcesses);
+    const orderedDevices = [...devices].sort(
+      (a, b) => averagePeerRank(a.id, "target", processRanks) - averagePeerRank(b.id, "target", processRanks) || sortByTraffic(a, b)
     );
     return [
-      ...stackOrdered(orderedDevices, 260, 92, devices.length > 4 ? 132 : 162),
-      ...stackOrdered(orderedCrafts, 1030, 92, crafts.length > 4 ? 132 : 162),
-      ...stack(others, 650, 560, 120),
+      ...stackOrdered(orderedProducts, 120, 92, products.length > 4 ? 132 : 162),
+      ...stackOrdered(orderedProcesses, 700, 92, processes.length > 4 ? 132 : 162),
+      ...stackOrdered(orderedDevices, 1280, 92, devices.length > 4 ? 132 : 162),
+      ...stack(others, 980, 610, 120),
     ];
   }
 
@@ -2499,7 +2489,7 @@ function renderNeoTopology(topology = activeNeoTopology(), mode = state.classTop
     mode
   ).map((edge) => ({
     ...edge,
-    diagonal: mode === "product-process" || mode === "device-craft",
+    diagonal: mode === "product-process" || mode === "device-process",
   }));
   const meta = topologyModeMeta();
 
@@ -2612,12 +2602,12 @@ function openTopologyNode(nodeId) {
 function suggestedTopologyModes(entity) {
   if (!entity) return [];
   if (entity.entityType === "class") {
-    return ["product-process", "device-craft"];
+    return ["product-process", "device-process"];
   }
   if (entity.entityType === "product") return ["product-process"];
-  if (entity.entityType === "process_instance" || entity.entityType === "process") return ["product-process"];
+  if (entity.entityType === "process_instance" || entity.entityType === "process") return ["product-process", "device-process"];
   if (entity.entityType === "material" || entity.entityType === "part") return ["product-process"];
-  if (entity.entityType === "device" || entity.entityType === "craft") return ["device-craft"];
+  if (entity.entityType === "device") return ["device-process"];
   return [];
 }
 function renderClassDetailPanel() {
@@ -2780,10 +2770,18 @@ function entityDisplayLabel(item, entityType) {
   return item?.label || item?.name || item?.id || "Entity";
 }
 
+function deviceDisplayIdentity(item) {
+  const props = { ...(item?.properties || {}), ...(item?.runtime || {}) };
+  const value = firstField(props, ["设备编号", "device_id", "deviceId", "device_code", "deviceCode", "设备ID", "AGV编号", "工站编号", "工作站编号", "workstation_code", "workstationCode", "workstation_id", "workstationId", "station_code", "stationCode", "station_id", "stationId", "agv_code", "agvCode", "agv_id", "agvId", "code"], "");
+  if (value) return prefixedIdValue(value);
+  const fallback = prefixedIdValue(item?.subtitle || item?.summary || item?.id || "Device");
+  return fallback.replace(/^device:/i, "");
+}
+
 function entityDisplaySubtitle(item, entityType) {
   const props = item?.properties || item || {};
   if (entityType === "device") {
-    return firstField(props, ["设备编号", "AGV编号", "工站编号", "工作站编号", "device_code", "deviceCode", "device_id", "deviceId", "workstation_code", "workstationCode", "station_code", "stationCode", "agv_code", "agvCode", "agv_id", "agvId", "code"], item?.subtitle || item?.summary || item?.id || "Device");
+    return deviceDisplayIdentity(item);
   }
   if (entityType === "material") {
     return firstField(props, ["库位", "库位编号", "库位号", "仓位", "location", "slot"], item?.subtitle || item?.summary || item?.id || "Material");
@@ -2877,6 +2875,7 @@ function recordEndTime(record) {
 
 function workOrderStation(record) {
   return recordField(record, [
+    "分配设备",
     "分配工站",
     "分配工位",
     "工站",
@@ -2991,7 +2990,7 @@ function buildOntologyOrderTreeItems() {
     ].filter(Boolean));
     const relatedWorkOrders = workOrders.filter((workOrder) => catalogWorkOrderMatchesOrder(workOrder, orderKeys));
     const hasActiveWorkOrder = relatedWorkOrders.some(isActiveOntologyWorkOrder);
-    if (!isActiveOntologyOrder(order) && !hasActiveWorkOrder) return null;
+    if (!isActiveOntologyOrder(order) && !hasActiveWorkOrder && !relatedWorkOrders.length) return null;
     return normalizeOrderTreeItem(
       {
         ...order,
@@ -3065,7 +3064,7 @@ function renderOrderTree(orders, emptyMessage) {
                   </div>
                   <div class="order-tree-fields compact">
                     <span>工单编号</span><strong>${escapeHtml(workOrder.__treeId)}</strong>
-                    <span>分配工站</span><strong>${escapeHtml(workOrder.__station)}</strong>
+                    <span>分配设备</span><strong>${escapeHtml(workOrder.__station)}</strong>
                     <span>开始时间</span><strong>${escapeHtml(displayValue(workOrder.__startTime))}</strong>
                     <span>结束时间</span><strong>${escapeHtml(displayValue(workOrder.__endTime))}</strong>
                   </div>
@@ -3092,7 +3091,7 @@ function renderOrderTreePage() {
             <h2>Orders</h2>
             <p class="panel-muted">本体页仅展示当前正在执行或等待执行的订单与工单；已结束订单归档在 DATA / 订单工单历史。</p>
           </div>
-          <div class="metric-group">${renderMetricPills([`${orders.length}/${allOrders.length} 个活动订单`, `${workOrderCount} 个活动工单`, statusBadgeText()])}</div>
+          <div class="metric-group">${renderMetricPills([`${orders.length}/${allOrders.length} 个实时订单`, `${workOrderCount} 个实时工单`, statusBadgeText()])}</div>
         </div>
         ${renderOntologySearch("order", "搜索订单、工单、工序或工站...")}
         ${renderOrderTree(orders, "当前本体中未读取到正在执行或等待执行的订单/工单实例。")}
@@ -3183,7 +3182,7 @@ function buildDeviceTaskTreeItems(deviceItems) {
       subtitle: rowType(record) || item.subtitle || subtype,
       status,
       record,
-      taskType: transportTask ? "AGV运输任务" : matchedOrder || currentId ? "执行工单" : "当前任务",
+      taskType: transportTask ? "AGV运输任务" : matchedOrder ? "执行工单" : "当前任务",
       task: matchedOrder
         ? {
           title: workOrderTitle(matchedOrder),
@@ -3202,8 +3201,8 @@ function buildDeviceTaskTreeItems(deviceItems) {
             status,
           }
           : {
-            title: currentId || "暂无当前任务",
-            id: currentId || "-",
+            title: "暂无当前任务",
+            id: "-",
             station: deviceTitle(record),
             status,
           },
@@ -3954,9 +3953,9 @@ function globalSearchCode(item, entityType) {
     return firstField(props, ["物料编号", "物料编码", "产品编号", "material_code", "materialCode", "product_code", "productCode", "code"], fallback);
   }
   if (entityType === "product") {
-    return firstField(props, ["产品编号", "产品ID", "product_code", "productCode", "product_id", "productId", "code", "id"], fallback);
+    return firstField(props, ["产品编号", "产品ID", "product_id", "productId", "code", "id"], fallback);
   }
-  return firstField(props, ["工序编号", "工艺编号", "process_code", "processCode", "craft_code", "craftCode", "code", "id"], fallback);
+  return firstField(props, ["工序编号", "工艺编号", "process_id", "processId", "code", "id"], fallback);
 }
 
 function globalSearchStatus(item) {
@@ -3968,18 +3967,15 @@ function globalSearchStationProcess(item, entityType) {
   const props = itemProperties(item);
   const value = firstField(props, [
     "所属工站",
+    "分配设备",
     "分配工站",
     "分配工位",
     "工站",
     "工位",
     "工序",
     "工序名称",
-    "工艺",
-    "工艺名称",
     "process_name",
     "processName",
-    "craft_name",
-    "craftName",
     "workstation_name",
     "workstationName",
     "station_name",
@@ -3988,7 +3984,7 @@ function globalSearchStationProcess(item, entityType) {
     "assigned_station_name",
   ], "");
   if (value) return value;
-  if (entityType === "process" || entityType === "craft") return entityDisplayLabel(item, entityType);
+  if (entityType === "process") return entityDisplayLabel(item, entityType);
   return "-";
 }
 
@@ -4122,7 +4118,7 @@ async function openGlobalSearchResult(entityType, entityId) {
 function openGlobalSearchTopology(entityType) {
   const classNodeId = entityType === "work_order" ? "work-order" : entityType === "device" ? "workstation" : entityType;
   state.route = "/ontology/classes";
-  state.classTopologyMode = entityType === "device" || entityType === "craft" ? "device-craft" : entityType === "product" || entityType === "process" || entityType === "material" ? "product-process" : "production";
+  state.classTopologyMode = entityType === "device" ? "device-process" : entityType === "product" || entityType === "process" || entityType === "material" ? "product-process" : "production";
   state.classViewMode = "topology";
   if (normalizeRoute(location.hash) !== "/ontology/classes") {
     location.hash = "#/ontology/classes";
@@ -4165,7 +4161,7 @@ function renderSearchPage() {
         <div class="panel-header panel-header-spread">
           <div>
             <h2>Global Search</h2>
-            <p class="panel-muted">跨设备、订单、工单、物料、产品、工序和工艺统一检索，支持关键词、ID、状态、工站或工序组合过滤。</p>
+            <p class="panel-muted">跨设备、订单、工单、物料、产品和工序统一检索，支持关键词、ID、状态、工站或工序组合过滤。</p>
           </div>
           <div class="metric-group">${renderMetricPills([`${results.length}/${records.length} 条结果`, statusBadgeText()])}</div>
         </div>
@@ -4813,14 +4809,17 @@ function currentWorkOrderId(row) {
   return firstField(row, ["当前工单编号", "执行工单编号", "current_work_order_id", "currentWorkOrderId", "work_order_id", "workOrderId", "task_id", "taskId"], "");
 }
 
+function isDeviceRuntimeBusy(row) {
+  return deviceConnectionState(row) !== "offline" && normalizeText(deviceRuntimeStatus(row)) === "busy";
+}
+
 function activeDeviceCurrentWorkOrderId(row) {
-  const connection = deviceConnectionState(row);
-  const runtime = normalizeText(deviceRuntimeStatus(row));
-  if (connection === "offline" || runtime === "idle" || runtime === "空闲") return "";
+  if (!isDeviceRuntimeBusy(row)) return "";
   return currentWorkOrderId(row);
 }
 
 function findWorkOrderForDevice(device, workOrders) {
+  if (!isDeviceRuntimeBusy(device)) return null;
   const currentId = normalizeText(activeDeviceCurrentWorkOrderId(device));
   const deviceId = normalizeText(deviceIdentity(device));
   const title = normalizeText(deviceTitle(device));
@@ -4829,7 +4828,7 @@ function findWorkOrderForDevice(device, workOrders) {
     const orderId = normalizeText(workOrderIdentity(order));
     const assigned = normalizeText(assignedDeviceText(order));
     return (currentId && orderId && currentId.includes(orderId)) || (assigned && ((deviceId && assigned.includes(deviceId)) || (title && assigned.includes(title))));
-  });
+  }) || null;
 }
 
 function explicitTransportTaskId(row) {
@@ -4876,7 +4875,7 @@ function renderDeviceStatusPage() {
   const workstationRows = rows.filter(isWorkstationRow);
   const workstationTasks = workstationRows.map((device) => {
     const matchedOrder = findWorkOrderForDevice(device, workOrders);
-    return { device, order: matchedOrder, currentId: activeDeviceCurrentWorkOrderId(device) };
+    return { device, order: matchedOrder };
   });
   const agvRows = rows.filter(isAgvRow);
   const agvTasks = [
@@ -4938,13 +4937,13 @@ function renderDeviceStatusPage() {
           <div class="panel-header compact-header">
             <div>
               <h3>工站当前执行工单</h3>
-              <p class="panel-muted">优先读取设备当前工单字段，并关联工单数据</p>
+              <p class="panel-muted">仅展示已关联到实时活跃工单的数据，避免设备残留字段误报执行中</p>
             </div>
           </div>
           <div class="entity-grid entity-grid-2">
             ${workstationTasks.length
-              ? workstationTasks.map(({ device, order, currentId }) => {
-                const status = order ? firstField(order, ["工单状", "status", "state"], "执行") : deviceStatus(device, "未确认");
+              ? workstationTasks.map(({ device, order }) => {
+                const status = order ? firstField(order, ["工单状", "status", "state"], "执行") : deviceRuntimeStatus(device) || deviceConnectionState(device);
                 return `
                   <article class="entity-card">
                     <div class="entity-card-head">
@@ -4952,18 +4951,18 @@ function renderDeviceStatusPage() {
                         <h3>${escapeHtml(deviceTitle(device))}</h3>
                         <p class="panel-muted">${escapeHtml(deviceIdentity(device) || device.__table)}</p>
                       </div>
-                      <span class="status-chip ${statusClass(status)}">${escapeHtml(status)}</span>
+                      <span class="status-chip ${statusClass(status)}">${escapeHtml(statusDisplayText(status))}</span>
                     </div>
                     <div class="entity-fields">
                       <span>设备状态</span><span>${escapeHtml(statusDisplayText(deviceConnectionState(device)))}${deviceRuntimeStatus(device) ? ` / ${escapeHtml(statusDisplayText(deviceRuntimeStatus(device)))}` : ""}</span>
-                      <span>当前工单</span><span>${escapeHtml(order ? workOrderTitle(order) : currentId || "")}</span>
-                      <span>工单编号</span><span>${escapeHtml(order ? workOrderIdentity(order) || "-" : currentId || "-")}</span>
+                      <span>当前工单</span><span>${escapeHtml(order ? workOrderTitle(order) : "暂无当前任务")}</span>
+                      <span>工单编号</span><span>${escapeHtml(order ? workOrderIdentity(order) || "-" : "-")}</span>
                       <span>执行设备</span><span>${escapeHtml(order ? assignedDeviceText(order) || deviceTitle(device) : deviceTitle(device))}</span>
                     </div>
                   </article>
                 `;
               }).join("")
-              : "<article class='entity-card'><h3>暂无工站执行记录</h3><p class='panel-muted'>未从 device 数据识别到工站或当前工单字段</p></article>"}
+              : "<article class='entity-card'><h3>暂无工站执行记录</h3><p class='panel-muted'>未从 device 数据识别到工站记录</p></article>"}
           </div>
         </div>
 
@@ -5478,7 +5477,7 @@ function renderAgentConsole() {
           </div>
           <div id="agent-chat-log" class="agent-chat-log ${state.agent.messages.length ? "" : "empty"}">${renderAgentMessagesHtml()}</div>
           <form id="agent-form" class="agent-form">
-              <textarea id="agent-input" class="agent-input" rows="3" placeholder="示例：请概括当前 ontology 中的仓库、订单、产线和库存预警信息"></textarea>
+              <textarea id="agent-input" class="agent-input" rows="3" placeholder="示例：请概括当前 ontology 中的仓库、订单、产线和库存预警信息">${escapeHtml(state.agent.draft || "")}</textarea>
             <div class="agent-actions">
               <button id="agent-send-btn" class="toolbar-btn primary" type="submit" ${state.agent.pending ? "disabled" : ""}>发送到 Agent</button>
               <button id="agent-stop-btn" class="toolbar-btn" type="button" ${state.agent.pending ? "" : "disabled"}>停止</button>
@@ -5514,10 +5513,12 @@ function ensureAgentConsoleRoot() {
 }
 
 function renderAgentConsoleOverlay() {
+  const snapshot = captureAgentInputState();
   const root = ensureAgentConsoleRoot();
   root.innerHTML = renderAgentConsole();
   bindAgentEvents(root);
   renderAgentMessages();
+  restoreAgentInputState(snapshot);
 }
 
 function ensureThemeSwitcherRoot() {
@@ -5533,11 +5534,8 @@ function renderThemeSwitcher() {
   const root = ensureThemeSwitcherRoot();
   root.innerHTML = `
     <aside class="theme-switcher" aria-label="主题颜色配置">
-      <span>主题颜色</span>
-      <div class="theme-switcher-options">
-        <button class="${state.theme === "dark" ? "active" : ""}" type="button" data-theme-value="dark" aria-pressed="${state.theme === "dark"}">黑色</button>
-        <button class="${state.theme === "light" ? "active" : ""}" type="button" data-theme-value="light" aria-pressed="${state.theme === "light"}">白色</button>
-      </div>
+      <button class="theme-dot dark ${state.theme === "dark" ? "active" : ""}" type="button" data-theme-value="dark" aria-label="切换到黑色主题" title="黑色主题" aria-pressed="${state.theme === "dark"}"></button>
+      <button class="theme-dot light ${state.theme === "light" ? "active" : ""}" type="button" data-theme-value="light" aria-label="切换到白色主题" title="白色主题" aria-pressed="${state.theme === "light"}"></button>
     </aside>
   `;
   root.querySelectorAll("[data-theme-value]").forEach((button) => {
@@ -5568,6 +5566,25 @@ function renderAgentMessages() {
   log.scrollTop = log.scrollHeight;
 }
 
+function captureAgentInputState() {
+  const input = document.querySelector("#agent-input");
+  if (!input) return null;
+  state.agent.draft = input.value;
+  return {
+    focused: document.activeElement === input,
+    selectionStart: input.selectionStart,
+    selectionEnd: input.selectionEnd,
+  };
+}
+
+function restoreAgentInputState(snapshot) {
+  if (!snapshot?.focused) return;
+  const input = document.querySelector("#agent-input");
+  if (!input) return;
+  input.focus();
+  input.setSelectionRange(snapshot.selectionStart ?? input.value.length, snapshot.selectionEnd ?? input.value.length);
+}
+
 function renderPage() {
   if (!state.ontology) {
     state.ontology = buildFallbackOntology();
@@ -5590,8 +5607,6 @@ function renderPage() {
     html = renderEntityListPage("product");
   } else if (state.route === "/ontology/processes") {
     html = renderEntityListPage("process");
-  } else if (state.route === "/ontology/crafts") {
-    html = renderEntityListPage("craft");
   } else if (state.route === "/tools/search") {
     html = renderSearchPage();
   } else if (state.route === "/tools/reasoning-rules") {
@@ -6123,9 +6138,14 @@ function bindAgentEvents(root = document) {
   const stopBtn = root.querySelector("#agent-stop-btn");
   const clearBtn = root.querySelector("#agent-clear-btn");
 
+  input?.addEventListener("input", () => {
+    state.agent.draft = input.value;
+  });
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const text = input?.value || "";
+    state.agent.draft = "";
     if (input) input.value = "";
     await sendAgentMessage(text);
   });
@@ -6134,6 +6154,7 @@ function bindAgentEvents(root = document) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       const text = input.value;
+      state.agent.draft = "";
       input.value = "";
       await sendAgentMessage(text);
     }
@@ -6151,8 +6172,9 @@ function bindAgentEvents(root = document) {
   root.querySelectorAll(".agent-suggestion").forEach((button) => {
     button.addEventListener("click", () => {
       state.agent.consoleOpen = true;
+      state.agent.draft = button.dataset.agentPrompt || "";
       if (input) {
-        input.value = button.dataset.agentPrompt || "";
+        input.value = state.agent.draft;
         input.focus();
       }
     });
@@ -6207,19 +6229,6 @@ function initialize() {
 }
 
 initialize();
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

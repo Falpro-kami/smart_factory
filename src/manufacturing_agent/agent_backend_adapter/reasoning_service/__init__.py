@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .agv_reasoner import AGV_TASK_RULE, observe_agv_tasks
-from .device_reasoner import DEVICE_CRAFT_RULE, STATUS_ALLOCATION_RULE, check_device_history
+from .device_reasoner import DEVICE_PROCESS_RULE, STATUS_ALLOCATION_RULE, check_device_history
 from .material_reasoner import INVENTORY_CONSTRAINT_RULE
 from .order_reasoner import ORDER_SPLIT_RULE, observe_order_split
 from .product_reasoner import PRODUCT_PROCESS_RULE
@@ -13,7 +13,7 @@ from .quality_reasoner import QUALITY_ROUTING_RULE, check_quality_trace
 ONTOLOGY_INFERENCE_RULES: list[dict[str, Any]] = [
     PRODUCT_PROCESS_RULE,
     ORDER_SPLIT_RULE,
-    DEVICE_CRAFT_RULE,
+    DEVICE_PROCESS_RULE,
     AGV_TASK_RULE,
     INVENTORY_CONSTRAINT_RULE,
     QUALITY_ROUTING_RULE,

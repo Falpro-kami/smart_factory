@@ -163,6 +163,19 @@ DEVICE_TIME_COLUMNS = (
     "\u66f4\u65b0\u65f6\u95f4",
     "\u6700\u540e\u5fc3\u8df3\u65f6\u95f4",
 )
+DEVICE_CURRENT_TASK_COLUMNS = (
+    "current_work_order_id",
+    "currentWorkOrderId",
+    "work_order_id",
+    "workOrderId",
+    "task_id",
+    "taskId",
+    "\u5f53\u524d\u5de5\u5355\u7f16\u53f7",
+    "\u6267\u884c\u5de5\u5355\u7f16\u53f7",
+    "\u5de5\u5e8f\u7f16\u53f7",
+    "\u5f53\u524d\u4efb\u52a1",
+    "\u5f53\u524d\u4efb\u52a1\u5f00\u59cb\u65f6\u95f4",
+)
 DEVICE_ID_ALIASES = {
     "DEV005": ("AGV-001",),
     "AGV-001": ("DEV005",),
@@ -436,6 +449,7 @@ def sync_existing_device_tables(
         status_column = first_existing_column(columns, DEVICE_STATUS_COLUMNS)
         connection_column = first_existing_column(columns, DEVICE_CONNECTION_COLUMNS)
         time_column = first_existing_column(columns, DEVICE_TIME_COLUMNS)
+        clear_task_cache = connection_state == "offline" or status in {"", "idle"}
         if status_column:
             assignments.append(f"{safe_column_name(status_column)} = %s")
             values.append(status)
@@ -445,6 +459,11 @@ def sync_existing_device_tables(
         if time_column:
             assignments.append(f"{safe_column_name(time_column)} = %s")
             values.append(event_time)
+        if clear_task_cache:
+            for column in DEVICE_CURRENT_TASK_COLUMNS:
+                actual_column = first_existing_column(columns, (column,))
+                if actual_column:
+                    assignments.append(f"{safe_column_name(actual_column)} = NULL")
         if not assignments:
             continue
         id_values = device_id_values_for_table(device_id, table_name)
@@ -658,8 +677,8 @@ def fetch_order_rows_for_history(order_id: str) -> list[dict[str, Any]]:
                     COALESCE(w.`工单ID`, w.`工单名称`, '') AS work_order_id,
                     COALESCE(w.`工单名称`, '') AS work_order_name,
                     COALESCE(w.`工单类型`, w.`工单名称`, '') AS process_name,
-                    COALESCE(w.`分配工站`, '') AS assigned_device_id,
-                    COALESCE(w.`分配工站`, '') AS assigned_device_name,
+                    COALESCE(w.`分配设备`, '') AS assigned_device_id,
+                    COALESCE(w.`分配设备`, '') AS assigned_device_name,
                     COALESCE(w.`工单状态`, '') AS work_order_status,
                     COALESCE(w.`创建时间`, NOW()) AS work_order_start_time,
                     COALESCE(w.`结束时间`, %s, NOW()) AS work_order_end_time,
@@ -964,15 +983,32 @@ def extract_material_ids_from_description(description: str) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
-def extract_label_codes_from_description(description: str, order_id: str, quantity: int = 1) -> list[str]:
+def item_id_from_work_order(work_order: dict[str, Any], order_id: str) -> str:
+    explicit_item_id = str(work_order.get("item_id") or work_order.get("itemId") or "")
+    if explicit_item_id:
+        return explicit_item_id
+    work_order_id = str(work_order.get("工单ID") or work_order.get("work_order_id") or "")
+    match = re.search(rf"({re.escape(order_id)}-ITEM-\d{{3}})", work_order_id)
+    if match:
+        return match.group(1)
+    return f"{order_id}-ITEM-001"
+
+
+def extract_label_codes_from_description(
+    description: str,
+    order_id: str,
+    quantity: int = 1,
+    item_id: str = "",
+) -> list[str]:
     codes = [
         token.strip()
         for token in re.split(r"[,，、;；\s]+", str(description or ""))
-        if token.strip().startswith(f"{order_id}-LABEL-")
+        if token.strip().startswith(f"{order_id}-LABEL-") or (item_id and token.strip().startswith(f"{item_id}-LABEL-"))
     ]
     if codes:
         return list(dict.fromkeys(codes))
-    return [f"{order_id}-LABEL-{index:03d}" for index in range(1, max(1, quantity) + 1)]
+    prefix = item_id or order_id
+    return [f"{prefix}-LABEL-{index:03d}" for index in range(1, max(1, quantity) + 1)]
 
 
 def consume_outbound_materials(work_order: dict[str, Any], event_time: datetime) -> dict[str, Any]:
@@ -1032,12 +1068,13 @@ def ensure_store_product_schema(cursor: Any) -> None:
     )
 
 
-def order_product_name(cursor: Any, order_id: str) -> str:
+def order_product_info(cursor: Any, order_id: str) -> dict[str, Any]:
     try:
         order_id_col = safe_column_name(order_id_column(cursor))
         cursor.execute(
             f"""
-            SELECT COALESCE(`产品名称`, '') AS product_name
+            SELECT
+                COALESCE(`产品名称`, '') AS product_name
             FROM `orders`
             WHERE {order_id_col} = %s
             LIMIT 1
@@ -1045,25 +1082,31 @@ def order_product_name(cursor: Any, order_id: str) -> str:
             (order_id,),
         )
         row = cursor.fetchone() or {}
-        return str(row.get("product_name") or "")
+        return {
+            "product_name": str(row.get("product_name") or ""),
+            "quantity": 1,
+        }
     except Exception:
-        return ""
+        return {"product_name": "", "quantity": 1}
+
+
+def order_product_name(cursor: Any, order_id: str) -> str:
+    return str(order_product_info(cursor, order_id).get("product_name") or "")
 
 
 def store_labeled_products(work_order: dict[str, Any], event_time: datetime) -> dict[str, Any]:
     order_id = str(work_order.get("所属订单号") or "")
     if not order_id:
         return {"inserted": 0, "product_codes": []}
-    try:
-        quantity = max(1, int(work_order.get("工序数量") or 1))
-    except (TypeError, ValueError):
-        quantity = 1
     description = str(work_order.get("description") or "")
-    label_codes = extract_label_codes_from_description(description, order_id, quantity)
+    item_id = item_id_from_work_order(work_order, order_id)
 
     with mysql_connection("order") as order_conn:
         with order_conn.cursor() as order_cursor:
-            product_name = order_product_name(order_cursor, order_id) or order_id
+            order_info = order_product_info(order_cursor, order_id)
+            product_name = str(order_info.get("product_name") or order_id)
+            quantity = 1
+    label_codes = extract_label_codes_from_description(description, order_id, quantity, item_id)
 
     rows = [
         {
@@ -1178,7 +1221,55 @@ def clear_device_current_task(device_id: str, event_time: datetime) -> None:
                 """,
                 (event_time, *device_id_values_for_table(device_id, DEVICE_RUNTIME_TABLE)),
             )
+            sync_existing_device_tables(cursor, device_id, "online", "idle", event_time)
         conn.commit()
+
+
+def reconcile_finished_device_current_tasks(limit: int = 200) -> None:
+    try:
+        with mysql_connection("device") as device_conn:
+            with device_conn.cursor() as device_cursor:
+                ensure_device_runtime_schema(device_cursor)
+                device_cursor.execute(
+                    f"""
+                    SELECT `设备编号` AS device_id, `执行工单编号` AS work_order_id
+                    FROM {DEVICE_RUNTIME_TABLE}
+                    WHERE `执行工单编号` IS NOT NULL AND `执行工单编号` <> ''
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+                device_rows = [dict(row) for row in device_cursor.fetchall()]
+        if not device_rows:
+            return
+
+        work_order_ids = tuple(dict.fromkeys(str(row.get("work_order_id") or "") for row in device_rows if row.get("work_order_id")))
+        if not work_order_ids:
+            return
+
+        placeholders = ", ".join(["%s"] * len(work_order_ids))
+        with mysql_connection("order") as order_conn:
+            with order_conn.cursor() as order_cursor:
+                order_cursor.execute(
+                    f"""
+                    SELECT `工单ID` AS work_order_id, `工单状态` AS status
+                    FROM `work_orders`
+                    WHERE `工单ID` IN ({placeholders})
+                    """,
+                    work_order_ids,
+                )
+                terminal_ids = {
+                    str(row.get("work_order_id") or "")
+                    for row in order_cursor.fetchall()
+                    if is_archived_status(row.get("status"))
+                }
+
+        event_time = datetime.now()
+        for row in device_rows:
+            if str(row.get("work_order_id") or "") in terminal_ids:
+                clear_device_current_task(str(row.get("device_id") or ""), event_time)
+    except Exception as exc:
+        print(f"finished device current task reconciliation skipped: {exc}", file=sys.stderr, flush=True)
 
 
 def handle_workorder_status_changed(event: dict[str, Any]) -> None:
@@ -1203,8 +1294,8 @@ def handle_workorder_status_changed(event: dict[str, Any]) -> None:
                     `工单名称`,
                     `所属订单号`,
                     `工单类型`,
-                    `工序数量`,
                     `工序编号`,
+                    `分配设备`,
                     `description`
                 FROM `work_orders`
                 WHERE `工单ID` = %s OR `工单名称` = %s
@@ -1216,19 +1307,18 @@ def handle_workorder_status_changed(event: dict[str, Any]) -> None:
             if not work_order:
                 return
             if finished:
-                clear_device_current_task(str(work_order.get("分配工站") or ""), event_time)
+                clear_device_current_task(str(work_order.get("分配设备") or work_order.get("分配工站") or ""), event_time)
 
             cursor.execute(
                 """
                 UPDATE `work_orders`
                 SET
                     `工单状态` = %s,
-                    `已完成工序数量` = CASE WHEN %s THEN COALESCE(`工序数量`, 1) ELSE `已完成工序数量` END,
                     `更新时间` = %s,
                     `结束时间` = CASE WHEN %s THEN %s ELSE `结束时间` END
                 WHERE `工单ID` = %s OR `工单名称` = %s
                 """,
-                (status, completed, event_time, finished, event_time, work_order_id, work_order_id),
+                (status, event_time, finished, event_time, work_order_id, work_order_id),
             )
 
             order_id = str(work_order.get("所属订单号") or "")
@@ -1407,6 +1497,7 @@ def run_windows_consumer() -> None:
     begin_timestamp_ms = int(time.time() * 1000)
     ensure_rocketmq_topic(mqadmin, env, config)
     cleanup_archived_live_orders()
+    reconcile_finished_device_current_tasks()
 
     try:
         while True:
@@ -1466,6 +1557,7 @@ def run_windows_consumer() -> None:
                 mark_stale_device_heartbeats()
             except Exception as exc:
                 print(f"device heartbeat stale check skipped: {exc}", file=sys.stderr, flush=True)
+            reconcile_finished_device_current_tasks()
             run_scheduler_queue_tick()
             if len(bodies) >= int(config["batch_size"]):
                 print(
@@ -1506,10 +1598,12 @@ def run_python_client_consumer() -> None:
     consumer.subscribe(config["topic"], callback, config["expression"])
     consumer.start()
     cleanup_archived_live_orders()
+    reconcile_finished_device_current_tasks()
 
     try:
         while running:
             mark_stale_device_heartbeats()
+            reconcile_finished_device_current_tasks()
             run_scheduler_queue_tick()
             time.sleep(1)
     finally:

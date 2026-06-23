@@ -5,8 +5,7 @@
       { label: "Devices", hash: "#/ontology/devices", description: "设备资产与运行状态" },
       { label: "Orders", hash: "#/ontology/orders", description: "订单树与拆分工单" },
       { label: "Materials", hash: "#/ontology/materials", description: "物料与库存信息" },
-      { label: "Products", hash: "#/ontology/products", description: "产品定义与工艺模板" },
-      { label: "Crafts", hash: "#/ontology/crafts", description: "工艺流程与能力关系" },
+      { label: "Products", hash: "#/ontology/products", description: "产品定义与工序模板" },
       { label: "Processes", hash: "#/ontology/processes", description: "产品工序节点" },
       { label: "Classes", hash: "#/ontology/classes", description: "本体类完整拓扑" },
       { label: "Relations", hash: "#/ontology/relations", description: "类关系管理" },
@@ -40,7 +39,7 @@ export const ROUTE_META = {
   "/ontology/classes": {
     title: "Classes",
     breadcrumb: "Ontology / Classes",
-    description: "查看包含设备、物料、订单、工单、产品和工艺的完整本体类拓扑。",
+    description: "查看包含设备、物料、订单、工单、产品和工序的完整本体类拓扑。",
   },
   "/ontology/relations": {
     title: "Relations",
@@ -55,7 +54,7 @@ export const ROUTE_META = {
   "/ontology/orders": {
     title: "Orders",
     breadcrumb: "Ontology / Orders",
-    description: "合并查看订单和拆分工单，包含状态、开始/结束时间和工单分配工站。",
+    description: "合并查看订单和拆分工单，包含状态、开始/结束时间和工单分配设备。",
   },
   "/ontology/work-orders": {
     title: "Work Orders",
@@ -70,12 +69,7 @@ export const ROUTE_META = {
   "/ontology/products": {
     title: "Products",
     breadcrumb: "Ontology / Products",
-    description: "查看产品定义、工艺模板与包装要求。",
-  },
-  "/ontology/crafts": {
-    title: "Crafts",
-    breadcrumb: "Ontology / Crafts",
-    description: "查看工艺流程节点、能力关系和工艺属性。",
+    description: "查看产品定义、工序模板与包装要求。",
   },
   "/ontology/processes": {
     title: "Processes",

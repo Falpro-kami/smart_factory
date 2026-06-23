@@ -68,7 +68,6 @@ DEVICE_ID_ALIASES = {
 NEO4J_CANONICAL_LABELS = [
     "Class",
     "Product",
-    "Craft",
     "Process",
     "ProcessInstance",
     "AssemblyStep",
@@ -83,7 +82,7 @@ CANONICAL_CLASS_RELATIONS = [
     ("Work_order", "Workstation", "assigned to"),
     ("Order", "Product", "produces"),
     ("Product", "Process", "has_step"),
-    ("Workstation", "Craft", "can_execute"),
+    ("Workstation", "Process", "can_run_on"),
     ("Warehouse", "Material", "stores"),
     ("AGV", "Material", "transports"),
     ("Material", "Workstation", "supplied to"),
@@ -95,8 +94,7 @@ TOPOLOGY_CLASS_NODES: list[dict[str, Any]] = [
     {"id": "work-order", "label": "Work_order", "entityType": "work_order", "tone": "tone-violet", "x": 43, "y": 14, "moduleType": "work_order"},
     {"id": "workstation", "label": "Workstation", "entityType": "device", "tone": "tone-cyan", "x": 72, "y": 14, "moduleType": "device"},
     {"id": "product", "label": "Product", "entityType": "product", "tone": "tone-pink", "x": 22, "y": 43, "moduleType": "product"},
-    {"id": "craft", "label": "Craft", "entityType": "craft", "tone": "tone-violet", "x": 43, "y": 43, "moduleType": "craft"},
-    {"id": "process", "label": "Process", "entityType": "process", "tone": "tone-cyan", "x": 72, "y": 43, "moduleType": "process"},
+    {"id": "process", "label": "Process", "entityType": "process", "tone": "tone-cyan", "x": 43, "y": 43, "moduleType": "process"},
     {"id": "warehouse", "label": "Warehouse", "entityType": "device", "tone": "tone-cyan", "x": 43, "y": 72, "moduleType": "device"},
     {"id": "material", "label": "Material", "entityType": "material", "tone": "tone-violet", "x": 72, "y": 72, "moduleType": "material"},
     {"id": "agv", "label": "AGV", "entityType": "device", "tone": "tone-pink", "x": 22, "y": 84, "moduleType": "device"},
@@ -108,7 +106,7 @@ TOPOLOGY_CLASS_EDGES: list[dict[str, str]] = [
     {"source": "work-order", "target": "workstation", "label": "assigned to", "type": "ASSIGNED_TO"},
     {"source": "order", "target": "product", "label": "produces", "type": "PRODUCES"},
     {"source": "product", "target": "process", "label": "has_step", "type": "HAS_STEP"},
-    {"source": "workstation", "target": "craft", "label": "can_execute", "type": "CAN_EXECUTE"},
+    {"source": "workstation", "target": "process", "label": "can_run_on", "type": "CAN_RUN_ON"},
     {"source": "warehouse", "target": "material", "label": "stores", "type": "STORES"},
     {"source": "agv", "target": "material", "label": "transports", "type": "TRANSPORTS"},
     {"source": "material", "target": "workstation", "label": "supplied to", "type": "SUPPLIED_TO"},
@@ -612,8 +610,8 @@ def sync_archived_order_history_from_mysql(limit: int = 500) -> int:
                     "work_order_id": work_order_id,
                     "work_order_name": str(first_present(work_order, ("工单名称", "任务名称", "work_order_name", "workOrderName")) or work_order_id),
                     "process_name": str(first_present(work_order, ("工单类型", "工序名称", "工序编号", "process_name", "processName")) or ""),
-                    "assigned_device_id": str(first_present(work_order, ("分配工站", "设备编号", "device_id", "deviceId")) or ""),
-                    "assigned_device_name": str(first_present(work_order, ("分配工站", "设备名称", "device_name", "deviceName")) or ""),
+                    "assigned_device_id": str(first_present(work_order, ("分配设备", "分配工站", "设备编号", "device_id", "deviceId")) or ""),
+                    "assigned_device_name": str(first_present(work_order, ("分配设备", "分配工站", "设备名称", "device_name", "deviceName")) or ""),
                     "work_order_status": str(first_present(work_order, ("工单状态", "任务状态", "status", "state")) or "已完成"),
                     "work_order_start_time": first_present(work_order, ("开始时间", "创建时间", "work_order_start_time", "started_at", "created_at")) or datetime.now(),
                     "work_order_end_time": first_present(work_order, ("结束时间", "work_order_end_time", "ended_at")) or datetime.now(),
@@ -662,7 +660,7 @@ def sync_device_run_history_from_mysql(limit: int = 500) -> int:
         if not is_archived_order_status(status):
             continue
         work_order_id = str(first_present(work_order, ("工单ID", "工单编号", "任务编号", "work_order_id", "workOrderId", "id")) or "")
-        device_id = str(first_present(work_order, ("分配工站", "设备编号", "device_id", "deviceId")) or "")
+        device_id = str(first_present(work_order, ("分配设备", "分配工站", "设备编号", "device_id", "deviceId")) or "")
         if not work_order_id or not device_id:
             continue
         work_order_type = str(first_present(work_order, ("工单类型", "任务类型", "工序编号", "process_id")) or "")
@@ -670,7 +668,7 @@ def sync_device_run_history_from_mysql(limit: int = 500) -> int:
         rows.append(
             {
                 "device_id": device_id,
-                "device_name": str(first_present(work_order, ("分配工站", "设备名称", "device_name", "deviceName")) or device_id),
+                "device_name": str(first_present(work_order, ("分配设备", "分配工站", "设备名称", "device_name", "deviceName")) or device_id),
                 "device_type": "AGV" if "agv" in work_order_type.lower() else "Workstation",
                 "work_order_id": work_order_id,
                 "work_order_name": str(first_present(work_order, ("工单名称", "任务名称", "work_order_name", "workOrderName")) or work_order_id),
@@ -775,7 +773,7 @@ def read_agv_tasks(limit: int = 200) -> list[dict[str, Any]]:
             "创建时间": row.get("创建时间"),
             "实际开始时间": row.get("开始时间"),
             "结束时间": row.get("结束时间"),
-            "AGV编号": str(row.get("分配工站") or transport_payload.get("agv_id") or ""),
+            "AGV编号": str(row.get("分配设备") or row.get("分配工站") or transport_payload.get("agv_id") or ""),
             "订单编号": str(row.get("所属订单号") or ""),
             "工单编号": str(row.get("工单ID") or ""),
         }
@@ -1107,12 +1105,20 @@ def ensure_topology_classes_in_neo4j() -> None:
     run_neo4j_write(
         """
         MATCH (class:Class {ontology: $ontology, source: $source})
-        WHERE NOT class.id IN $node_ids
+        WHERE NOT (class.id IN $node_ids)
         DETACH DELETE class
         """,
         ontology="smart-production-ontology",
         source="frontend-class-topology",
         node_ids=[node["id"] for node in nodes],
+    )
+    run_neo4j_write(
+        """
+        MATCH (class:Class)
+        WHERE toLower(coalesce(class.id, '')) = 'craft'
+           OR toLower(coalesce(class.name, '')) = 'craft'
+        DETACH DELETE class
+        """,
     )
     run_neo4j_write(
         """
@@ -1251,9 +1257,38 @@ def build_mysql_entity_item(entity_type: str, row: dict[str, Any], table_name: s
     }
 
 
+def entity_mysql_tables(entity_type: str, limit: int = 50) -> list[dict[str, Any]]:
+    config = ENTITY_CONFIG[entity_type]
+    fixed_tables = {
+        "order": ("orders",),
+        "work_order": ("work_orders",),
+    }.get(entity_type)
+    if fixed_tables:
+        result: list[dict[str, Any]] = []
+        existing_tables = set(discover_tables(config["database"]))
+        for table_name in fixed_tables:
+            if table_name not in existing_tables:
+                continue
+            rows = read_mysql_table(config["database"], table_name, limit=limit)
+            result.append(
+                {
+                    "name": table_name,
+                    "columns": list(rows[0].keys()) if rows else [],
+                    "rows": rows,
+                }
+            )
+        return result
+    return read_mysql_tables(
+        config["database"],
+        config["include_keywords"],
+        config["exclude_keywords"],
+        limit=limit,
+    )
+
+
 def build_mysql_entity_detail(entity_type: str, entity_id: str) -> dict[str, Any] | None:
     config = ENTITY_CONFIG[entity_type]
-    tables = read_mysql_tables(config["database"], config["include_keywords"], config["exclude_keywords"], limit=50)
+    tables = entity_mysql_tables(entity_type, limit=50)
 
     target_suffix = normalize_text(entity_id.split(":", 1)[1] if ":" in entity_id else entity_id)
 
@@ -1280,13 +1315,7 @@ def build_mysql_entity_detail(entity_type: str, entity_id: str) -> dict[str, Any
     return None
 
 def build_mysql_catalog(entity_type: str, limit: int = 50) -> list[dict[str, Any]]:
-    config = ENTITY_CONFIG[entity_type]
-    tables = read_mysql_tables(
-        config["database"],
-        config["include_keywords"],
-        config["exclude_keywords"],
-        limit=limit,
-    )
+    tables = entity_mysql_tables(entity_type, limit=limit)
     if entity_type == "device":
         tables = [table for table in tables if str(table.get("name") or "").lower() == "devices"]
     items: list[dict[str, Any]] = []
@@ -1570,8 +1599,6 @@ def entity_type_from_labels(record: dict[str, Any], fallback: str) -> str:
         return "material"
     if "processinstance" in labels or "assemblystep" in labels or "process" in labels:
         return "process"
-    if "craft" in labels:
-        return "craft"
     if "device" in labels:
         return "device"
     return fallback
@@ -1627,6 +1654,7 @@ def build_product_process_topology(limit: int = 120) -> dict[str, Any]:
         """
         MATCH (p)-[step_rel]->(step)
         WHERE any(label IN labels(p) WHERE toLower(label) = 'product')
+          AND toLower(type(step_rel)) = 'has_step'
           AND any(label IN labels(step) WHERE toLower(label) IN ['process', 'processinstance', 'assemblystep'])
         OPTIONAL MATCH (step)-[use_rel]->(used)
         WHERE toLower(type(use_rel)) IN ['uses', 'consumes']
@@ -1640,7 +1668,7 @@ def build_product_process_topology(limit: int = 120) -> dict[str, Any]:
                collect(DISTINCT CASE WHEN used IS NULL THEN null ELSE {node_id: elementId(used), labels: labels(used), props: properties(used), relation: type(use_rel)} END) AS used_nodes,
                collect(DISTINCT CASE WHEN produced IS NULL THEN null ELSE {node_id: elementId(produced), labels: labels(produced), props: properties(produced), relation: type(produce_rel)} END) AS produced_nodes,
                coalesce(p.name, '') AS product_sort,
-               coalesce(step.order, step.name, step.process_name, '') AS step_sort
+               coalesce(step_rel.order, step_rel.sequence, step.stepId, step.name, '') AS step_sort
         ORDER BY product_sort, step_sort
         LIMIT $limit
         """,
@@ -1710,25 +1738,69 @@ def build_process_material_topology(limit: int = 100) -> dict[str, Any]:
 
 
 def build_device_process_topology(limit: int = 100) -> dict[str, Any]:
-    graph = topology_graph_from_query(
+    records = run_neo4j_read(
         """
-        MATCH (d)-[r]->(p)
-        WHERE any(label IN labels(d) WHERE toLower(label) = 'device')
-          AND any(label IN labels(p) WHERE toLower(label) = 'craft')
-        RETURN elementId(d) AS source_node_id, labels(d) AS source_labels, properties(d) AS source_props,
-               elementId(p) AS target_node_id, labels(p) AS target_labels, properties(p) AS target_props,
-               type(r) AS relation
-        ORDER BY coalesce(d.name, ''), coalesce(p.name, '')
+        MATCH (product)-[step_rel]->(process)-[capability_rel]-(device)
+        WHERE any(label IN labels(product) WHERE toLower(label) = 'product')
+          AND toLower(type(step_rel)) = 'has_step'
+          AND any(label IN labels(process) WHERE toLower(label) = 'process')
+          AND any(label IN labels(device) WHERE toLower(label) = 'device')
+          AND toLower(type(capability_rel)) = 'can_run_on'
+        WITH product, process, device, step_rel, capability_rel
+        ORDER BY coalesce(product.name, ''), coalesce(step_rel.order, step_rel.sequence, process.stepId, process.name, ''), coalesce(device.name, '')
+        RETURN elementId(product) AS product_node_id, labels(product) AS product_labels, properties(product) AS product_props,
+               elementId(process) AS process_node_id, labels(process) AS process_labels, properties(process) AS process_props,
+               elementId(device) AS device_node_id, labels(device) AS device_labels, properties(device) AS device_props,
+               type(step_rel) AS step_relation,
+               type(capability_rel) AS capability_relation
         LIMIT $limit
         """,
-        {"source": "device", "target": "craft"},
-        {
-            "source": {"x": 140, "y_values": [100, 260, 420, 580], "row_step": 80, "tone": "cyan"},
-            "target": {"x": 880, "y_values": [100, 260, 420, 580], "row_step": 80, "tone": "violet"},
-        },
-        limit,
+        limit=limit,
     )
-    return {"key": "device-craft", "title": "设备-工艺能力拓扑图", "description": "Neo4j device 与关联 Craft 的 CAN_EXECUTE 能力关系。", **graph}
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    counters: dict[str, int] = defaultdict(int)
+    device_stats: dict[str, dict[str, set[str]]] = defaultdict(lambda: {"products": set(), "processes": set()})
+
+    def add_node(record: dict[str, Any], entity_type: str, x: int, base_y: int, tone: str) -> dict[str, Any]:
+        item = build_neo4j_entity_item(entity_type, record)
+        if not any(node["id"] == item["id"] for node in nodes):
+            index = counters[entity_type]
+            counters[entity_type] += 1
+            nodes.append(neo4j_graph_node(record, entity_type, x, base_y + index * 130, tone))
+        return item
+
+    for record in records:
+        product_record = {"node_id": record.get("product_node_id"), "labels": record.get("product_labels") or [], "props": record.get("product_props") or {}}
+        process_record = {"node_id": record.get("process_node_id"), "labels": record.get("process_labels") or [], "props": record.get("process_props") or {}}
+        device_record = {"node_id": record.get("device_node_id"), "labels": record.get("device_labels") or [], "props": record.get("device_props") or {}}
+        product = add_node(product_record, "product", 120, 120, "yellow")
+        process = add_node(process_record, "process", 700, 90, "green")
+        device = add_node(device_record, "device", 1280, 120, "cyan")
+        device_stats[device["id"]]["products"].add(product["label"])
+        device_stats[device["id"]]["processes"].add(process["label"])
+        edges.append({"source": product["id"], "target": process["id"], "label": record.get("step_relation") or "has_step", "sourceClass": product["label"], "targetClass": process["label"], "sourceType": "product", "targetType": "process"})
+        edges.append({"source": process["id"], "target": device["id"], "label": record.get("capability_relation") or "CAN_RUN_ON", "sourceClass": process["label"], "targetClass": device["label"], "sourceType": "process", "targetType": "device"})
+
+    for node in nodes:
+        if node.get("entityType") != "device":
+            continue
+        stats = device_stats.get(node["id"])
+        if not stats:
+            continue
+        product_count = len(stats["products"])
+        process_count = len(stats["processes"])
+        node["subtitle"] = f"{product_count} 产品 / {process_count} 工序能力"
+        node["properties"] = {
+            **(node.get("properties") or {}),
+            "capability_product_count": product_count,
+            "capability_process_count": process_count,
+            "capability_products": sorted(stats["products"]),
+            "capability_processes": sorted(stats["processes"]),
+        }
+
+    graph = compact_graph(nodes, edges)
+    return {"key": "device-process", "title": "设备-工序能力图", "description": "按产品区分设备可执行工序能力：Product HAS_STEP Process，Process CAN_RUN_ON Device。", **graph}
 
 
 def build_topologies_payload() -> dict[str, Any]:
@@ -1744,23 +1816,18 @@ def build_neo4j_entity_item(entity_type: str, record: dict[str, Any]) -> dict[st
     node_id = str(record.get("node_id") or "")
     labels = clean_value(record.get("labels") or [])
     if entity_type == "product":
-        identity = props.get("productId") or props.get("product_id") or props.get("name") or node_id
+        identity = props.get("product_id") or props.get("productId") or props.get("name") or node_id
         label = props.get("name") or props.get("title") or identity
-        subtitle = props.get("productId") or props.get("product_code") or "Product"
+        subtitle = props.get("product_id") or props.get("productId") or "Product"
         status = props.get("status") or props.get("state") or ""
     elif entity_type == "process":
-        identity = props.get("code") or props.get("processCode") or props.get("process_id") or props.get("name") or node_id
-        label = props.get("process_name") or props.get("name") or identity
+        identity = props.get("process_id") or props.get("code") or props.get("name") or node_id
+        label = props.get("name") or identity
         subtitle = props.get("type") or props.get("stage") or "Product Process"
-        status = props.get("status") or ""
-    elif entity_type == "craft":
-        identity = props.get("craftId") or props.get("craft_id") or props.get("code") or props.get("name") or node_id
-        label = props.get("name") or props.get("craft_name") or identity
-        subtitle = props.get("type") or props.get("description") or "Craft"
         status = props.get("status") or ""
     elif entity_type in {"process_instance", "assembly_step"}:
         identity = props.get("stepId") or props.get("step_id") or props.get("order") or props.get("name") or node_id
-        label = props.get("process_name") or props.get("name") or props.get("title") or identity
+        label = props.get("name") or props.get("title") or identity
         subtitle = props.get("instruction") or props.get("description") or "Step"
         status = props.get("status") or ""
     elif entity_type == "device":
@@ -1798,7 +1865,6 @@ def build_neo4j_catalog(entity_type: str, limit: int = 50) -> list[dict[str, Any
     label_map = {
         "product": "Product",
         "process": "Process",
-        "craft": "Craft",
         "process_instance": "ProcessInstance",
         "assembly_step": "AssemblyStep",
         "device": "Device",
@@ -1815,6 +1881,7 @@ def find_product_record(entity_id: str | None = None) -> dict[str, Any] | None:
     WHERE any(label IN labels(p) WHERE toLower(label) = 'product')
       AND (
         $entity_id = ''
+        OR toString(p.product_id) = $entity_id
         OR toString(p.productId) = $entity_id
         OR toLower(toString(p.name)) CONTAINS toLower($name)
       )
@@ -1843,10 +1910,10 @@ def find_route_steps(product_node_id: str) -> list[dict[str, Any]]:
     MATCH (p)-[rel]->(step)
     WHERE elementId(p) = $product_node_id
       AND toLower(type(rel)) = 'has_step'
-      AND any(label IN labels(step) WHERE toLower(label) = 'processinstance')
-    OPTIONAL MATCH (proc)
-    WHERE any(label IN labels(proc) WHERE toLower(label) = 'process')
-      AND toString(proc.name) = toString(step.process_name)
+      AND any(label IN labels(step) WHERE toLower(label) IN ['process', 'processinstance'])
+    OPTIONAL MATCH (step)-[device_rel]-(device)
+    WHERE any(label IN labels(device) WHERE toLower(label) = 'device')
+      AND toLower(type(device_rel)) = 'can_run_on'
     OPTIONAL MATCH (step)-[use_rel]->(used)
     WHERE toLower(type(use_rel)) = 'uses'
     OPTIONAL MATCH (step)-[produce_rel]->(produced)
@@ -1854,10 +1921,11 @@ def find_route_steps(product_node_id: str) -> list[dict[str, Any]]:
     RETURN
       elementId(step) AS step_node_id,
       properties(step) AS step_props,
-      properties(proc) AS process_props,
+      properties(step) AS process_props,
+      properties(device) AS device_props,
       collect(DISTINCT properties(used)) AS uses,
       collect(DISTINCT properties(produced)) AS produces,
-      coalesce(step.order, step.stepId, step.name, step.process_name, '') AS sort_key
+      coalesce(rel.order, rel.sequence, step.stepId, step.name, '') AS sort_key
     ORDER BY sort_key
     """
     records = run_neo4j_read(query, product_node_id=product_node_id)
@@ -1865,7 +1933,10 @@ def find_route_steps(product_node_id: str) -> list[dict[str, Any]]:
     for record in records:
         step_props = clean_value(record.get("step_props") or {})
         process_props = clean_value(record.get("process_props") or {})
+        device_props = clean_value(record.get("device_props") or {})
         step_props["process"] = process_props
+        if device_props:
+            step_props["device"] = device_props
         step_props["uses"] = [clean_value(item) for item in (record.get("uses") or []) if item]
         step_props["produces"] = [clean_value(item) for item in (record.get("produces") or []) if item]
         step_props["neo4jNodeId"] = record.get("step_node_id")
@@ -1876,7 +1947,7 @@ def find_route_steps(product_node_id: str) -> list[dict[str, Any]]:
     fallback_query = """
     MATCH (s)
     WHERE any(label IN labels(s) WHERE toLower(label) = 'assemblystep')
-    WITH s, coalesce(s.stepId, s.order, s.name, s.process_name, 0) AS sort_key
+    WITH s, coalesce(s.stepId, s.name, 0) AS sort_key
     RETURN elementId(s) AS step_node_id, properties(s) AS step_props
     ORDER BY sort_key
     LIMIT 20
@@ -2002,7 +2073,7 @@ def build_instance_graph(selected_product: dict[str, Any] | None, catalogs: dict
     step_node_ids: list[str] = []
     for index, step in enumerate(steps[:8]):
         step_id = str(step.get("stepId") or step.get("step_id") or step.get("order") or step.get("name") or index)
-        step_name = str(step.get("process_name") or step.get("name") or step.get("title") or step_id)
+        step_name = str(step.get("name") or step.get("title") or step_id)
         step_subtitle = str(step.get("instruction") or step.get("description") or step.get("process", {}).get("name") or "ProcessInstance")
         x, y = step_positions[index % len(step_positions)]
         y = min(88, y + (index // len(step_positions)) * 14)
@@ -2159,9 +2230,9 @@ def build_product_detail(entity_id: str | None = None) -> dict[str, Any] | None:
 
     props = clean_value(record.get("props") or {})
     node_id = str(record.get("node_id") or "")
-    product_id = props.get("productId") or props.get("product_id") or props.get("name") or node_id
+    product_id = props.get("product_id") or props.get("productId") or props.get("name") or node_id
     label = props.get("name") or props.get("title") or product_id
-    subtitle = props.get("productId") or props.get("product_code") or "Product"
+    subtitle = props.get("product_id") or props.get("productId") or "Product"
     parts = find_product_parts(node_id) if node_id else []
     steps = find_route_steps(node_id) if node_id else []
     relations: list[dict[str, Any]] = []
@@ -2177,7 +2248,7 @@ def build_product_detail(entity_id: str | None = None) -> dict[str, Any] | None:
             }
         )
     for step in steps[:20]:
-        step_name = step.get("process_name") or step.get("name") or step.get("title") or "Step"
+        step_name = step.get("name") or step.get("title") or "Step"
         relations.append(
             {
                 "type": "HAS_STEP",
@@ -2210,9 +2281,9 @@ def build_neo4j_catalog_from_products(limit: int = 50) -> list[dict[str, Any]]:
     for record in records:
         props = clean_value(record.get("props") or {})
         node_id = str(record.get("node_id") or "")
-        identity = props.get("productId") or props.get("product_id") or props.get("name") or node_id
+        identity = props.get("product_id") or props.get("productId") or props.get("name") or node_id
         label = props.get("name") or props.get("title") or identity
-        subtitle = props.get("productId") or props.get("product_code") or "Product"
+        subtitle = props.get("product_id") or props.get("productId") or "Product"
         items.append(
             {
                 "id": f"product:{identity}",
@@ -2232,13 +2303,11 @@ def build_neo4j_catalog_from_products(limit: int = 50) -> list[dict[str, Any]]:
 def build_live_ontology_payload() -> dict[str, Any]:
     devices = safe_device_catalog()
     materials = build_mysql_catalog("material")
-    orders = build_mysql_catalog("order")
-    work_orders = build_mysql_catalog("work_order")
+    orders = build_mysql_catalog("order", limit=500)
+    work_orders = build_mysql_catalog("work_order", limit=500)
     products = build_neo4j_catalog_from_products()
     processes = build_neo4j_catalog("process")
-    crafts = build_neo4j_catalog("craft")
 
-    craft_records = query_neo4j_nodes("Craft", limit=50)
     process_records = query_neo4j_nodes("Process", limit=50)
     process_instances = query_neo4j_nodes("ProcessInstance", limit=50)
     assembly_steps = query_neo4j_nodes("AssemblyStep", limit=50)
@@ -2250,7 +2319,6 @@ def build_live_ontology_payload() -> dict[str, Any]:
         "productCount": len(products),
         "orderCount": len(orders),
         "workOrderCount": len(work_orders),
-        "craftCount": len(craft_records),
         "processCount": len(process_records),
         "processInstanceCount": len(process_instances),
         "assemblyStepCount": len(assembly_steps),
@@ -2264,7 +2332,7 @@ def build_live_ontology_payload() -> dict[str, Any]:
         "order": orders,
         "work_order": work_orders,
         "product": products,
-            "craft": crafts,
+        "process": processes,
     })
 
     warnings: list[str] = []
@@ -2286,7 +2354,7 @@ def build_live_ontology_payload() -> dict[str, Any]:
             "name": "智能产线 Ontology",
             "version": "live",
             "status": "Live",
-            "description": "基于 Neo4j 产品/工艺图与 MySQL 设备、库存、订单数据构建的实时智能产线本体。",
+            "description": "基于 Neo4j 产品工序图与 MySQL 设备、库存、订单数据构建的实时智能产线本体。",
         },
         "summary": summary,
         "classGraph": class_graph,
@@ -2297,7 +2365,6 @@ def build_live_ontology_payload() -> dict[str, Any]:
             "order": orders,
             "work_order": work_orders,
             "product": products,
-            "craft": crafts,
             "process": processes,
         },
         "warnings": warnings,
@@ -2310,8 +2377,6 @@ def list_entities(entity_type: str, limit: int = 50, q: str | None = None) -> di
         items = build_neo4j_catalog_from_products(limit=limit)
     elif entity_type == "process":
         items = build_neo4j_catalog("process", limit=limit)
-    elif entity_type == "craft":
-        items = build_neo4j_catalog("craft", limit=limit)
     elif entity_type == "device":
         items = safe_device_catalog()[:limit]
     elif entity_type in ENTITY_CONFIG:

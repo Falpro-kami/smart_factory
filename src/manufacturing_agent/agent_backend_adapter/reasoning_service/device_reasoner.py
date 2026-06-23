@@ -5,15 +5,15 @@ from typing import Any
 from .rule_result import RuleResult, normalized_identity_tokens
 
 
-DEVICE_CRAFT_RULE: dict[str, Any] = {
-    "id": "device-craft-match",
+DEVICE_PROCESS_RULE: dict[str, Any] = {
+    "id": "device-process-match",
     "type": "设备匹配推理",
-    "purpose": "根据工艺能力匹配可执行设备。",
-    "condition": "Workstation 或 Device 通过 CAN_EXECUTE 关联 Craft，工序需要对应 Craft。",
-    "conclusion": "工单只能分配给 ontology 中存在且具备能力的设备。",
-    "example": "工艺 -> 可执行设备",
-    "source": "workstation",
-    "target": "craft",
+    "purpose": "根据产品工序能力匹配可执行设备。",
+    "condition": "Product 通过 HAS_STEP 关联 Process，Process 通过 CAN_RUN_ON 关联 Device。",
+    "conclusion": "工单只能分配给 ontology 中存在且具备对应产品工序能力的设备。",
+    "example": "产品 -> 工序 -> 可执行设备",
+    "source": "product-process",
+    "target": "process",
 }
 
 STATUS_ALLOCATION_RULE: dict[str, Any] = {
@@ -21,7 +21,7 @@ STATUS_ALLOCATION_RULE: dict[str, Any] = {
     "type": "状态约束推理",
     "purpose": "判断设备是否可分配并过滤无效历史。",
     "condition": "设备存在于 ontology 设备目录，且状态不是故障、离线或维护。",
-    "conclusion": "设备空闲或可用时可分配；不存在或故障设备不可分配，历史记录不进入设备运行历史视图。",
+    "conclusion": "设备空闲或可用时可分配；不存在或故障设备不进入设备运行历史视图。",
     "example": "设备空闲 -> 可分配；设备故障/不存在 -> 不可分配",
     "source": "device",
     "target": "work-order",
