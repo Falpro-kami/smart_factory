@@ -17,20 +17,6 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from neo4j import GraphDatabase
 
-try:
-    from .work_order_validation import (
-        WorkOrderDraftValidationError,
-        build_rule_based_work_order_draft,
-        validate_and_complete_work_order_draft,
-    )
-except ImportError:
-    from work_order_validation import (
-        WorkOrderDraftValidationError,
-        build_rule_based_work_order_draft,
-        validate_and_complete_work_order_draft,
-    )
-
-
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
@@ -133,6 +119,32 @@ WORK_ORDER_LEGACY_STATUSES = ("等待中", "已分配", "已取消", "已下单"
 SCHEDULER_QUEUE_TABLE = "scheduler_order_queue"
 WORK_ORDER_DELIVERY_LOG_TABLE = "work_order_delivery_log"
 ORDER_ID_SEQUENCE_WIDTH = 3
+PLAN_WORK_ORDER_TYPES = ("出库", "加工", "质检", "贴标", "入库", "运输")
+PLAN_TYPE_PROCESS_MAP = {
+    "出库": "OUTPUT-001",
+    "加工": "PROC-001",
+    "质检": "DETECT-001",
+    "贴标": "LABEL-001",
+    "入库": "INPUT-001",
+    "运输": "AGV-TRANSPORT",
+}
+PLAN_PROCESS_TYPE_MAP = {process_id: work_order_type for work_order_type, process_id in PLAN_TYPE_PROCESS_MAP.items()}
+PLAN_PROCESS_DEVICE_MAP = {
+    "OUTPUT-001": "DEV001",
+    "PROC-001": "DEV002",
+    "DETECT-001": "DEV003",
+    "LABEL-001": "DEV004",
+    "INPUT-001": "DEV001",
+    "AGV-TRANSPORT": "DEV005",
+}
+PLAN_MATERIAL_EFFECT_MAP = {
+    "出库": "move_out",
+    "加工": "transform",
+    "质检": "inspect",
+    "贴标": "label",
+    "入库": "store_in",
+    "运输": "transfer",
+}
 
 
 def ensure_order_status_schema(cursor: Any) -> None:
@@ -1132,6 +1144,7 @@ def find_route_steps(session, product_node_id: str) -> list[dict[str, Any]]:
     return [normalize_props(record["props"]) for record in fallback_route]
 
 
+
 def ensure_live_order_tables(cursor: Any) -> None:
     cursor.execute(
         """
@@ -1215,8 +1228,8 @@ def ensure_live_order_columns(cursor: Any) -> None:
         "前置工单": "`前置工单` VARCHAR(64) DEFAULT NULL",
         "后续工单": "`后续工单` VARCHAR(64) DEFAULT NULL",
         "分配设备": "`分配设备` VARCHAR(64) DEFAULT ''",
-        "起始工站": "`起始工站` VARCHAR(128) DEFAULT ''",
-        "目标工站": "`目标工站` VARCHAR(128) DEFAULT ''",
+        "起始设备": "`起始设备` VARCHAR(128) DEFAULT ''",
+        "目标设备": "`目标设备` VARCHAR(128) DEFAULT ''",
         "工单状态": "`工单状态` ENUM('已创建','受阻','已下发','已接收','执行中','已完成','失败') NOT NULL DEFAULT '已创建'",
         "创建时间": "`创建时间` DATETIME NULL",
         "更新时间": "`更新时间` DATETIME NULL",
@@ -1286,55 +1299,64 @@ def generate_order_id_for_today() -> str:
     return f"{prefix}{max_sequence + 1:0{ORDER_ID_SEQUENCE_WIDTH}d}"
 
 
-def parse_work_order_draft_argument(arguments: dict[str, Any]) -> dict[str, Any] | None:
-    raw = (
-        arguments.get("work_order_draft")
-        or arguments.get("workOrderDraft")
-        or arguments.get("draft")
-        or arguments.get("agent_draft")
-        or arguments.get("agentDraft")
+def fetch_existing_order(cursor: Any, order_id: str) -> dict[str, Any] | None:
+    order_id_col = safe_column_name(order_id_column(cursor))
+    cursor.execute(
+        f"""
+        SELECT {order_id_col} AS order_id, `产品名称` AS product_name, `订单状态` AS order_status
+        FROM `orders`
+        WHERE {order_id_col} = %s
+        LIMIT 1
+        """,
+        (order_id,),
     )
-    if raw in (None, "") and ("items" in arguments or "work_orders" in arguments or "order" in arguments):
-        raw = arguments
-    if raw in (None, ""):
-        return None
-    parsed = json.loads(raw) if isinstance(raw, str) else raw
-    if not isinstance(parsed, dict):
-        raise ValueError("work_order_draft 必须是 JSON 对象")
-    return parsed
+    return cursor.fetchone()
 
 
-def build_split_context(
-    *,
-    order_id: str,
-    product: dict[str, Any],
-    parts: list[dict[str, Any]],
-    route_steps: list[dict[str, Any]],
-    workstations: list[dict[str, Any]],
-    arguments: dict[str, Any],
-    quantity: int,
-    pallet_id: str,
-    agv_id: str,
-) -> dict[str, Any]:
-    required_materials = dedupe_materials(
-        collect_argument_materials(arguments)
-        or collect_part_materials(parts)
-        or collect_route_input_materials(route_steps)
-    )
-    allocated_materials = allocate_store_materials(required_materials, quantity)
+def create_production_order(arguments: dict[str, Any]) -> dict[str, Any]:
+    product_id = str(arguments.get("product_id") or arguments.get("productId") or "").strip()
+    product_name = str(arguments.get("product_name") or arguments.get("productName") or "").strip()
+    quantity = positive_int(arguments.get("quantity")) or 1
+    order_id = str(arguments.get("order_id") or arguments.get("orderId") or "").strip() or generate_order_id_for_today()
+    if not product_id:
+        raise ValueError("product_id is required")
+    if not product_name:
+        raise ValueError("product_name is required")
+
+    now = datetime.now()
+    with get_mysql_connection("order") as conn:
+        with conn.cursor() as cursor:
+            ensure_live_order_tables(cursor)
+            ensure_live_order_columns(cursor)
+            order_id_col = safe_column_name(order_id_column(cursor))
+            existing_order = fetch_existing_order(cursor, order_id)
+            cursor.execute(
+                f"""
+                INSERT INTO `orders` (
+                    {order_id_col}, `产品名称`, `订单状态`, `订单创建时间`, `更新时间`, `备注`
+                ) VALUES (%s, %s, '已创建', %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    `产品名称` = VALUES(`产品名称`),
+                    `更新时间` = VALUES(`更新时间`)
+                """,
+                (
+                    order_id,
+                    product_name,
+                    now,
+                    now,
+                    str(arguments.get("remark") or arguments.get("备注") or ""),
+                ),
+            )
+        conn.commit()
+
     return {
+        "success": True,
         "order_id": order_id,
-        "product": product,
-        "parts": parts,
-        "route_steps": route_steps,
-        "workstations": workstations,
-        "required_materials": required_materials,
-        "allocated_materials": allocated_materials,
-        "outbound_materials": allocated_materials or required_materials,
-        "pallet_id": pallet_id,
-        "agv_id": agv_id,
+        "product_id": product_id,
+        "product_name": product_name,
         "quantity": quantity,
-        "include_transport": arguments.get("include_transport", arguments.get("includeTransport", True)),
+        "created": existing_order is None,
+        "order_status": "已创建",
     }
 
 
@@ -1388,7 +1410,7 @@ def persist_production_order(arguments: dict[str, Any], split_result: dict[str, 
                         """
                         INSERT INTO `work_orders` (
                             `工单ID`, `工单名称`, `所属订单号`, `工单类型`,
-                            `工序编号`, `前置工单`, `后续工单`, `分配设备`, `起始工站`, `目标工站`, `工单状态`, `创建时间`,
+                            `工序编号`, `前置工单`, `后续工单`, `分配设备`, `起始设备`, `目标设备`, `工单状态`, `创建时间`,
                             `更新时间`, `description`
                         ) VALUES (
                             %(work_order_id)s, %(work_order_name)s, %(order_id)s, %(work_order_type)s,
@@ -1408,25 +1430,22 @@ def persist_production_order(arguments: dict[str, Any], split_result: dict[str, 
                                 (work_order.get("assigned_device") or {}).get("device_id")
                                 or (work_order.get("assigned_device") or {}).get("workstation_id")
                                 or work_order.get("分配设备")
-                                or work_order.get("分配工站")
                                 or ""
                             ),
                             "source_station": str(
                                 work_order.get("source_station")
-                                or work_order.get("起始工站")
+                                or work_order.get("起始设备")
                                 or (work_order.get("assigned_device") or {}).get("device_id")
                                 or (work_order.get("assigned_device") or {}).get("workstation_id")
                                 or work_order.get("分配设备")
-                                or work_order.get("分配工站")
                                 or ""
                             ),
                             "target_station": str(
                                 work_order.get("target_station")
-                                or work_order.get("目标工站")
+                                or work_order.get("目标设备")
                                 or (work_order.get("assigned_device") or {}).get("device_id")
                                 or (work_order.get("assigned_device") or {}).get("workstation_id")
                                 or work_order.get("分配设备")
-                                or work_order.get("分配工站")
                                 or ""
                             ),
                             "created_at": created_at,
@@ -1458,172 +1477,693 @@ def persist_production_order(arguments: dict[str, Any], split_result: dict[str, 
     }
 
 
-def split_order(arguments: dict[str, Any]) -> dict[str, Any]:
-    agent_draft = parse_work_order_draft_argument(arguments)
-    draft_order = agent_draft.get("order") if isinstance(agent_draft, dict) and isinstance(agent_draft.get("order"), dict) else {}
-    order_id = str(
-        arguments.get("order_id")
-        or arguments.get("orderId")
-        or (agent_draft or {}).get("order_id")
-        or draft_order.get("order_id")
-        or ""
-    ).strip() or generate_order_id_for_today()
-    product_id = str(
-        arguments.get("product_id")
-        or arguments.get("productId")
-        or (agent_draft or {}).get("product_id")
-        or draft_order.get("product_id")
-        or draft_order.get("productId")
-        or ""
-    ).strip()
-    product_name = str(
-        arguments.get("product_name")
-        or arguments.get("productName")
-        or (agent_draft or {}).get("product_name")
-        or draft_order.get("product_name")
-        or draft_order.get("productName")
-        or ""
-    ).strip()
-    quantity = int(arguments.get("quantity") or (agent_draft or {}).get("quantity") or draft_order.get("quantity") or 1)
-    pallet_id = str(arguments.get("pallet_id") or arguments.get("palletId") or f"{order_id}-PALLET").strip()
-    agv_id = str(arguments.get("agv_id") or arguments.get("agvId") or "DEV005").strip()
+def add_plan_issue(
+    issues: list[dict[str, Any]],
+    code: str,
+    path: str,
+    message: str,
+    **extra: Any,
+) -> None:
+    issue = {"code": code, "path": path, "message": message}
+    issue.update({key: value for key, value in extra.items() if value not in (None, "")})
+    issues.append(issue)
 
-    if not product_id and not product_name:
-        raise ValueError("必须提供 product_id 或 product_name")
-    if quantity <= 0:
-        raise ValueError("quantity 必须大于 0")
 
+def positive_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def read_plan_device_ids() -> set[str]:
+    device_ids: set[str] = set()
+    try:
+        with get_mysql_connection("device") as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT `设备编号` AS device_id FROM `devices`")
+                for row in cursor.fetchall():
+                    device_id = str(row.get("device_id") or "").strip()
+                    if device_id:
+                        device_ids.add(device_id)
+    except Exception as exc:
+        print(f"mysql device validation skipped: {exc}", file=sys.stderr, flush=True)
+
+    database = os.environ.get("NEO4J_DATABASE", "neo4j")
+    driver = get_neo4j_driver()
+    try:
+        with driver.session(database=database) as session:
+            result = session.run(
+                """
+                MATCH (d)
+                WHERE any(label IN labels(d) WHERE toLower(label) = 'device')
+                RETURN coalesce(d.deviceId, d.device_id, d.id, d.name) AS device_id
+                """
+            )
+            for record in result:
+                device_id = str(record.get("device_id") or "").strip()
+                if device_id:
+                    device_ids.add(device_id)
+    except Exception as exc:
+        print(f"neo4j device validation skipped: {exc}", file=sys.stderr, flush=True)
+    finally:
+        driver.close()
+    return device_ids
+
+
+def read_plan_process_specs(product_id: str, product_name: str) -> dict[str, Any]:
     database = os.environ.get("NEO4J_DATABASE", "neo4j")
     driver = get_neo4j_driver()
     try:
         with driver.session(database=database) as session:
             product = find_product(session, product_id, product_name)
             if not product:
-                return {
-                    "success": False,
-                    "message": "Neo4j 中未找到对应产品，未生成工单。",
-                    "order_id": order_id,
-                    "product_id": product_id,
-                    "product_name": product_name,
-                    "work_orders": [],
+                return {"product": None, "route": [], "process_specs": {}, "material_catalog": set()}
+            result = session.run(
+                """
+                MATCH (p)-[rel]->(proc)
+                WHERE elementId(p) = $product_node_id
+                  AND toLower(type(rel)) = 'has_step'
+                  AND any(label IN labels(proc) WHERE toLower(label) IN ['process_instance', 'process'])
+                OPTIONAL MATCH (proc)-[use_rel]->(used)
+                WHERE toLower(type(use_rel)) = 'uses'
+                OPTIONAL MATCH (proc)-[produce_rel]->(produced)
+                WHERE toLower(type(produce_rel)) = 'produces'
+                RETURN
+                  coalesce(proc.process_id, proc.processId, proc.process_code, proc.code, proc.stepId) AS process_id,
+                  coalesce(proc.process_type, proc.processType, '') AS process_type,
+                  coalesce(proc.order, proc.stepId, proc.process_id, proc.name, '') AS sort_key,
+                  collect(DISTINCT CASE WHEN used IS NULL THEN NULL ELSE {
+                    material_type: coalesce(used.name, used.type, used.material_type, used.materialType),
+                    quantity: coalesce(use_rel.quantity, 1)
+                  } END) AS uses,
+                  collect(DISTINCT CASE WHEN produced IS NULL THEN NULL ELSE {
+                    material_type: coalesce(produced.name, produced.type, produced.material_type, produced.materialType),
+                    quantity: coalesce(produce_rel.quantity, 1)
+                  } END) AS produces
+                ORDER BY sort_key
+                """,
+                product_node_id=str(product["_node_id"]),
+            )
+            route: list[str] = []
+            process_specs: dict[str, Any] = {}
+            material_catalog: set[str] = set()
+            for record in result:
+                process_id = str(record.get("process_id") or "").strip()
+                if not process_id:
+                    continue
+                route.append(process_id)
+                uses = [
+                    normalize_plan_material_requirement(item)
+                    for item in (record.get("uses") or [])
+                    if item
+                ]
+                produces = [
+                    normalize_plan_material_requirement(item)
+                    for item in (record.get("produces") or [])
+                    if item
+                ]
+                for material in (*uses, *produces):
+                    material_type = normalize_match_text(material.get("material_type"))
+                    if material_type:
+                        material_catalog.add(material_type)
+                process_specs[process_id] = {
+                    "process_id": process_id,
+                    "process_type": str(record.get("process_type") or PLAN_PROCESS_TYPE_MAP.get(process_id) or ""),
+                    "uses": uses,
+                    "produces": produces,
                 }
-
-            parts = find_product_parts(session, str(product["_node_id"]))
-            route_steps = find_route_steps(session, str(product["_node_id"]))
-
-        workstations = read_workstations()
-        split_context = build_split_context(
-            order_id=order_id,
-            product=product,
-            parts=parts,
-            route_steps=route_steps,
-            workstations=workstations,
-            arguments=arguments,
-            quantity=quantity,
-            pallet_id=pallet_id,
-            agv_id=agv_id,
-        )
-        draft = agent_draft or build_rule_based_work_order_draft(split_context)
-        try:
-            validation_result = validate_and_complete_work_order_draft(draft, split_context)
-        except WorkOrderDraftValidationError as exc:
             return {
-                "success": False,
-                "message": "工单草案未通过校验，未写入 MySQL。",
-                "order_id": order_id,
                 "product": {key: value for key, value in product.items() if key != "_node_id"},
-                "quantity": quantity,
-                "validation": {
-                    "ok": False,
-                    "errors": exc.errors,
-                    "warnings": exc.warnings,
-                    "source": "work_order_validation",
-                },
-                "work_orders": [],
+                "route": route,
+                "process_specs": process_specs,
+                "material_catalog": material_catalog,
             }
-
-        result = {
-            **validation_result,
-            "success": True,
-            "message": "工单草案已通过校验补全并写入 MySQL，尚未投入调度；用户明确下发订单后再调用调度工具。",
-            "order_id": order_id,
-            "product": {key: value for key, value in product.items() if key != "_node_id"},
-            "quantity": quantity,
-            "agv_id": agv_id,
-            "pallet_id": pallet_id,
-            "route_step_count": len(route_steps),
-            "workstation_source": "mysql:device.devices",
-            "workstation_count": len(workstations),
-            "draft_source": "agent" if agent_draft else "rule_based_validation",
-        }
-        production_persist = persist_production_order(arguments, result)
-        return {
-            **result,
-            "production_persist": production_persist,
-            "scheduler_submission": None,
-            "scheduler_submission_required": True,
-            "order_status_update": production_persist.get("order_status_update"),
-        }
     finally:
         driver.close()
+
+
+def normalize_plan_material_requirement(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {"material_type": str(item or "").strip(), "quantity": 1}
+    material_type = str(
+        first_present_normalized(
+            item,
+            ("material_type", "materialType", "type", "name", "物料类型", "物料名称"),
+        )
+        or ""
+    ).strip()
+    quantity = positive_int(first_present_normalized(item, ("quantity", "qty", "数量"))) or 1
+    return {"material_type": material_type, "quantity": quantity}
+
+
+def normalize_plan_material_entry(
+    item: Any,
+    path: str,
+    errors: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        add_plan_issue(errors, "invalid_material", path, "物料项必须是对象，并包含物料大类和数量。")
+        return None
+    material_type = str(
+        first_present_normalized(
+            item,
+            ("material_type", "materialType", "type", "name", "物料类型", "物料名称"),
+        )
+        or ""
+    ).strip()
+    quantity = positive_int(first_present_normalized(item, ("quantity", "qty", "数量")))
+    if not material_type:
+        add_plan_issue(errors, "missing_material_type", path, "物料项缺少物料大类。")
+    if quantity is None:
+        add_plan_issue(errors, "invalid_material_quantity", path, "物料数量必须是大于 0 的整数。")
+    if not material_type or quantity is None:
+        return None
+    return {
+        "material_type": material_type,
+        "quantity": quantity,
+        "allocation_status": "pending",
+        "material_instances": [],
+    }
+
+
+def normalize_plan_material_list(
+    work_order: dict[str, Any],
+    field_name: str,
+    path: str,
+    errors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    raw = work_order.get(field_name)
+    if raw is None:
+        chinese_field = "输入物料" if field_name == "input_materials" else "输出物料"
+        raw = work_order.get(chinese_field)
+    if not isinstance(raw, list):
+        add_plan_issue(errors, "invalid_material_list", path, f"{field_name} 必须提供，且必须是列表。")
+        return []
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(raw):
+        material = normalize_plan_material_entry(item, f"{path}[{index}]", errors)
+        if material:
+            normalized.append(material)
+    return normalized
+
+
+def material_quantity_by_type(materials: list[dict[str, Any]]) -> dict[str, int]:
+    quantities: dict[str, int] = {}
+    for material in materials:
+        key = normalize_match_text(material.get("material_type"))
+        if not key:
+            continue
+        quantities[key] = quantities.get(key, 0) + int(material.get("quantity") or 0)
+    return quantities
+
+
+def validate_required_materials(
+    actual: list[dict[str, Any]],
+    expected: list[dict[str, Any]],
+    path: str,
+    direction: str,
+    errors: list[dict[str, Any]],
+) -> None:
+    actual_quantities = material_quantity_by_type(actual)
+    for requirement in expected:
+        material_type = str(requirement.get("material_type") or "").strip()
+        expected_quantity = int(requirement.get("quantity") or 1)
+        actual_quantity = actual_quantities.get(normalize_match_text(material_type), 0)
+        if actual_quantity < expected_quantity:
+            add_plan_issue(
+                errors,
+                "material_requirement_not_met",
+                path,
+                f"{direction}物料不满足工艺要求：{material_type} 需要 {expected_quantity}，当前 {actual_quantity}。",
+                material_type=material_type,
+                expected_quantity=expected_quantity,
+                actual_quantity=actual_quantity,
+            )
+
+
+def validate_plan_materials(
+    work_order: dict[str, Any],
+    process_spec: dict[str, Any] | None,
+    material_catalog: set[str],
+    path: str,
+    errors: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    input_materials = normalize_plan_material_list(work_order, "input_materials", f"{path}.input_materials", errors)
+    output_materials = normalize_plan_material_list(work_order, "output_materials", f"{path}.output_materials", errors)
+    if material_catalog:
+        for direction, materials in (("输入", input_materials), ("输出", output_materials)):
+            for material in materials:
+                material_type = str(material.get("material_type") or "").strip()
+                if normalize_match_text(material_type) not in material_catalog:
+                    add_plan_issue(
+                        errors,
+                        "unknown_material_type",
+                        path,
+                        f"{direction}物料大类不在 Neo4j 产品工艺物料范围内：{material_type}。",
+                        material_type=material_type,
+                    )
+    if process_spec:
+        validate_required_materials(input_materials, process_spec.get("uses") or [], path, "输入", errors)
+        validate_required_materials(output_materials, process_spec.get("produces") or [], path, "输出", errors)
+    if str(work_order.get("工单类型") or "") == "运输" and input_materials and output_materials:
+        if material_quantity_by_type(input_materials) != material_quantity_by_type(output_materials):
+            add_plan_issue(errors, "transport_material_mismatch", path, "运输工单的输入物料和输出物料应保持一致。")
+    return input_materials, output_materials
+
+
+def validate_existing_plan_order(order_id: str, allow_existing: bool, errors: list[dict[str, Any]]) -> None:
+    if allow_existing:
+        return
+    try:
+        with get_mysql_connection("order") as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) AS total FROM `work_orders` WHERE `所属订单号` = %s", (order_id,))
+                total = int((cursor.fetchone() or {}).get("total") or 0)
+    except Exception as exc:
+        add_plan_issue(errors, "database_check_failed", "order.order_id", f"检查现有工单失败：{exc}")
+        return
+    if total > 0:
+        add_plan_issue(
+            errors,
+            "order_work_orders_already_exist",
+            "order.order_id",
+            "该订单已经存在工单，校验层不会覆盖已有工单。",
+            existing_work_order_count=total,
+        )
+
+
+def plan_work_order_id(order_id: str, item_no: int, sequence: int, work_order_type: str) -> str:
+    suffix = "TP" if work_order_type == "运输" else "WO"
+    return f"{order_id}-I{item_no:03d}-{suffix}-{sequence:03d}"
+
+
+def validate_item_transport_links(
+    work_orders: list[dict[str, Any]],
+    path: str,
+    errors: list[dict[str, Any]],
+) -> None:
+    for index, work_order in enumerate(work_orders):
+        if work_order.get("工单类型") != "运输":
+            continue
+        previous_work_order = work_orders[index - 1] if index > 0 else {}
+        next_work_order = work_orders[index + 1] if index + 1 < len(work_orders) else {}
+        if previous_work_order.get("工单类型") == "运输" or next_work_order.get("工单类型") == "运输":
+            add_plan_issue(errors, "invalid_transport_position", f"{path}.work_orders[{index}]", "运输工单必须位于两个非运输工单之间。")
+            continue
+        source_station = str(work_order.get("起始设备") or "").strip()
+        target_station = str(work_order.get("目标设备") or "").strip()
+        previous_device = str(previous_work_order.get("分配设备") or "").strip()
+        next_device = str(next_work_order.get("分配设备") or "").strip()
+        if not source_station or not target_station:
+            add_plan_issue(errors, "missing_transport_station", f"{path}.work_orders[{index}]", "运输工单必须填写起始设备和目标设备。")
+        if source_station and previous_device and source_station != previous_device:
+            add_plan_issue(errors, "transport_source_mismatch", f"{path}.work_orders[{index}].起始设备", "运输起始设备应等于前一张工单的分配设备。")
+        if target_station and next_device and target_station != next_device:
+            add_plan_issue(errors, "transport_target_mismatch", f"{path}.work_orders[{index}].目标设备", "运输目标设备应等于后一张工单的分配设备。")
+
+    non_transport_indices = [index for index, work_order in enumerate(work_orders) if work_order.get("工单类型") != "运输"]
+    for left, right in zip(non_transport_indices, non_transport_indices[1:]):
+        left_device = str(work_orders[left].get("分配设备") or "").strip()
+        right_device = str(work_orders[right].get("分配设备") or "").strip()
+        transports_between = [item for item in work_orders[left + 1:right] if item.get("工单类型") == "运输"]
+        if left_device and right_device and left_device != right_device and len(transports_between) != 1:
+            add_plan_issue(
+                errors,
+                "missing_transport_work_order",
+                f"{path}.work_orders",
+                "相邻非运输工单分配设备不同时，中间必须有且仅有一张运输工单。",
+                source_device=left_device,
+                target_device=right_device,
+            )
+        if left_device and right_device and left_device == right_device and transports_between:
+            add_plan_issue(
+                errors,
+                "unnecessary_transport_work_order",
+                f"{path}.work_orders",
+                "相邻非运输工单分配设备相同时，不应插入运输工单。",
+                device_id=left_device,
+            )
+
+
+def validate_work_order_plan(arguments: dict[str, Any]) -> dict[str, Any]:
+    plan = arguments.get("plan") if isinstance(arguments.get("plan"), dict) else arguments
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    if not isinstance(plan, dict):
+        add_plan_issue(errors, "invalid_plan", "", "计划必须是 JSON 对象。")
+        return {"success": False, "errors": errors, "warnings": warnings}
+
+    order = plan.get("order") if isinstance(plan.get("order"), dict) else {}
+    order_id = str(order.get("order_id") or order.get("orderId") or "").strip()
+    product_id = str(order.get("product_id") or order.get("productId") or "").strip()
+    product_name = str(order.get("product_name") or order.get("productName") or "").strip()
+    quantity = positive_int(order.get("quantity"))
+    if not order_id:
+        add_plan_issue(errors, "missing_order_id", "order.order_id", "order_id 必填。")
+    if not product_id:
+        add_plan_issue(errors, "missing_product_id", "order.product_id", "product_id 必填。")
+    if not product_name:
+        add_plan_issue(errors, "missing_product_name", "order.product_name", "product_name 必填。")
+    if quantity is None:
+        add_plan_issue(errors, "invalid_quantity", "order.quantity", "quantity 必须是大于 0 的整数。")
+    if order_id:
+        try:
+            with get_mysql_connection("order") as conn:
+                with conn.cursor() as cursor:
+                    ensure_live_order_tables(cursor)
+                    ensure_live_order_columns(cursor)
+                    existing_order = fetch_existing_order(cursor, order_id)
+        except Exception as exc:
+            add_plan_issue(errors, "database_check_failed", "order.order_id", f"检查订单是否存在失败：{exc}")
+            existing_order = None
+        if existing_order is None:
+            add_plan_issue(errors, "order_not_created", "order.order_id", "订单必须先创建，再基于订单拆分工单。")
+        elif product_name and str(existing_order.get("product_name") or "").strip() != product_name:
+            add_plan_issue(
+                errors,
+                "order_product_name_mismatch",
+                "order.product_name",
+                "WorkOrderPlan 中的 product_name 必须和已创建订单的产品名称一致。",
+                expected=str(existing_order.get("product_name") or "").strip(),
+                actual=product_name,
+            )
+
+    process_context = {"product": None, "route": [], "process_specs": {}, "material_catalog": set()}
+    if product_id and product_name:
+        try:
+            process_context = read_plan_process_specs(product_id, product_name)
+        except Exception as exc:
+            add_plan_issue(errors, "neo4j_validation_failed", "order.product_id", f"读取 Neo4j 产品/工艺失败：{exc}")
+        if not process_context.get("product"):
+            add_plan_issue(errors, "product_not_found", "order.product_id", "Neo4j 中未找到同时匹配 product_id 和 product_name 的产品。")
+
+    device_ids = read_plan_device_ids()
+    allow_existing = bool(arguments.get("allow_existing") or arguments.get("allowExisting"))
+    if order_id:
+        validate_existing_plan_order(order_id, allow_existing, errors)
+
+    items = plan.get("items")
+    if not isinstance(items, list) or not items:
+        add_plan_issue(errors, "invalid_items", "items", "items 必须是非空列表。")
+        items = []
+    if quantity is not None and len(items) != quantity:
+        add_plan_issue(errors, "item_count_mismatch", "items", "items 数量必须等于 order.quantity。", expected=quantity, actual=len(items))
+
+    expected_item_nos = list(range(1, len(items) + 1))
+    actual_item_nos: list[int] = []
+    normalized_items: list[dict[str, Any]] = []
+    expected_route = list(process_context.get("route") or [])
+    if not expected_route:
+        expected_route = [process_id for process_id in PLAN_TYPE_PROCESS_MAP.values() if process_id != "AGV-TRANSPORT"]
+    process_specs = process_context.get("process_specs") if isinstance(process_context.get("process_specs"), dict) else {}
+    material_catalog = process_context.get("material_catalog")
+    if not isinstance(material_catalog, set):
+        material_catalog = set()
+    created_at = datetime.now()
+    created_at_text = created_at.isoformat(timespec="seconds")
+
+    for item_index, item in enumerate(items):
+        item_path = f"items[{item_index}]"
+        if not isinstance(item, dict):
+            add_plan_issue(errors, "invalid_item", item_path, "item 必须是对象。")
+            continue
+        item_no = positive_int(item.get("item_no") or item.get("itemNo"))
+        if item_no is None:
+            add_plan_issue(errors, "invalid_item_no", f"{item_path}.item_no", "item_no 必须是大于 0 的整数。")
+            item_no = item_index + 1
+        actual_item_nos.append(item_no)
+        item_id = f"{order_id}-ITEM-{item_no:03d}" if order_id else ""
+        raw_work_orders = item.get("work_orders")
+        if not isinstance(raw_work_orders, list) or not raw_work_orders:
+            add_plan_issue(errors, "invalid_work_orders", f"{item_path}.work_orders", "work_orders 必须是非空列表。")
+            normalized_items.append({"item_no": item_no, "item_id": item_id, "work_orders": []})
+            continue
+
+        sequence_values: list[int] = []
+        prepared_work_orders: list[dict[str, Any]] = []
+        for work_order_index, raw_work_order in enumerate(raw_work_orders):
+            work_order_path = f"{item_path}.work_orders[{work_order_index}]"
+            if not isinstance(raw_work_order, dict):
+                add_plan_issue(errors, "invalid_work_order", work_order_path, "工单必须是对象。")
+                continue
+            sequence = positive_int(raw_work_order.get("sequence"))
+            if sequence is None:
+                add_plan_issue(errors, "invalid_sequence", f"{work_order_path}.sequence", "sequence 必填，且必须是大于 0 的整数。")
+                sequence = 0
+            else:
+                sequence_values.append(sequence)
+            for field_name in ("工单类型", "工序编号", "工单名称", "分配设备", "起始设备", "目标设备", "description"):
+                if not str(raw_work_order.get(field_name) or "").strip():
+                    add_plan_issue(errors, "missing_work_order_field", f"{work_order_path}.{field_name}", f"{field_name} 必填。")
+            work_order_type = str(raw_work_order.get("工单类型") or "").strip()
+            process_id_value = str(raw_work_order.get("工序编号") or "").strip()
+            assigned_device = str(raw_work_order.get("分配设备") or "").strip()
+            source_device = str(raw_work_order.get("起始设备") or "").strip()
+            target_device = str(raw_work_order.get("目标设备") or "").strip()
+            if work_order_type and work_order_type not in PLAN_WORK_ORDER_TYPES:
+                add_plan_issue(errors, "invalid_work_order_type", f"{work_order_path}.工单类型", "工单类型不在允许范围内。", allowed=list(PLAN_WORK_ORDER_TYPES))
+            expected_process_id = PLAN_TYPE_PROCESS_MAP.get(work_order_type)
+            if expected_process_id and process_id_value != expected_process_id:
+                add_plan_issue(
+                    errors,
+                    "process_type_mismatch",
+                    f"{work_order_path}.工序编号",
+                    "工单类型和工序编号不匹配。",
+                    expected=expected_process_id,
+                    actual=process_id_value,
+                )
+            expected_device = PLAN_PROCESS_DEVICE_MAP.get(process_id_value)
+            if assigned_device and device_ids and assigned_device not in device_ids:
+                add_plan_issue(errors, "unknown_device", f"{work_order_path}.分配设备", "分配设备不存在。", device_id=assigned_device)
+            if expected_device and assigned_device and assigned_device != expected_device:
+                add_plan_issue(
+                    errors,
+                    "device_process_mismatch",
+                    f"{work_order_path}.分配设备",
+                    "分配设备和工序编号不匹配。",
+                    expected=expected_device,
+                    actual=assigned_device,
+                )
+            if work_order_type and work_order_type != "运输":
+                if assigned_device and source_device and source_device != assigned_device:
+                    add_plan_issue(
+                        errors,
+                        "non_transport_source_mismatch",
+                        f"{work_order_path}.起始设备",
+                        "非运输工单的起始设备必须等于分配设备。",
+                        expected=assigned_device,
+                        actual=source_device,
+                    )
+                if assigned_device and target_device and target_device != assigned_device:
+                    add_plan_issue(
+                        errors,
+                        "non_transport_target_mismatch",
+                        f"{work_order_path}.目标设备",
+                        "非运输工单的目标设备必须等于分配设备。",
+                        expected=assigned_device,
+                        actual=target_device,
+                    )
+            process_spec = process_specs.get(process_id_value)
+            input_materials, output_materials = validate_plan_materials(
+                raw_work_order,
+                process_spec,
+                material_catalog,
+                work_order_path,
+                errors,
+            )
+            prepared_work_order = {
+                **raw_work_order,
+                "sequence": sequence,
+                "input_materials": input_materials,
+                "output_materials": output_materials,
+            }
+            prepared_work_orders.append(prepared_work_order)
+
+        expected_sequences = list(range(1, len(raw_work_orders) + 1))
+        if sorted(sequence_values) != expected_sequences:
+            add_plan_issue(
+                errors,
+                "non_continuous_sequence",
+                f"{item_path}.work_orders",
+                "sequence 必须从 1 开始且连续。",
+                expected=expected_sequences,
+                actual=sorted(sequence_values),
+            )
+        prepared_work_orders.sort(key=lambda work_order: int(work_order.get("sequence") or 0))
+        actual_route = [str(work_order.get("工序编号") or "") for work_order in prepared_work_orders if work_order.get("工单类型") != "运输"]
+        if expected_route and actual_route != expected_route:
+            add_plan_issue(
+                errors,
+                "route_mismatch",
+                f"{item_path}.work_orders",
+                "非运输工单的工艺路线必须和 Neo4j 产品工艺路线一致。",
+                expected=expected_route,
+                actual=actual_route,
+            )
+        validate_item_transport_links(prepared_work_orders, item_path, errors)
+
+        normalized_work_orders: list[dict[str, Any]] = []
+        for work_order in prepared_work_orders:
+            sequence = int(work_order.get("sequence") or 0)
+            work_order_type = str(work_order.get("工单类型") or "")
+            work_order_id = plan_work_order_id(order_id, item_no, sequence, work_order_type) if order_id else ""
+            assigned_station = str(work_order.get("分配设备") or "")
+            source_station = str(work_order.get("起始设备") or "")
+            target_station = str(work_order.get("目标设备") or "")
+            if work_order_type != "运输":
+                source_station = assigned_station
+                target_station = assigned_station
+            normalized_work_orders.append(
+                {
+                    "工单ID": work_order_id,
+                    "工单名称": str(work_order.get("工单名称") or work_order_id),
+                    "所属订单号": order_id,
+                    "item_no": item_no,
+                    "item_id": item_id,
+                    "sequence": sequence,
+                    "工单类型": work_order_type,
+                    "工序数量": 1,
+                    "已完成工序数量": 0,
+                    "工序编号": str(work_order.get("工序编号") or ""),
+                    "前置工单": None,
+                    "后续工单": None,
+                    "分配设备": assigned_station,
+                    "起始设备": source_station,
+                    "目标设备": target_station,
+                    "工单状态": "已创建",
+                    "创建时间": created_at_text,
+                    "更新时间": created_at_text,
+                    "结束时间": None,
+                    "description": str(work_order.get("description") or ""),
+                    "input_materials": work_order.get("input_materials") or [],
+                    "output_materials": work_order.get("output_materials") or [],
+                    "material_effect": PLAN_MATERIAL_EFFECT_MAP.get(work_order_type, ""),
+                }
+            )
+        for index, work_order in enumerate(normalized_work_orders):
+            work_order["前置工单"] = normalized_work_orders[index - 1]["工单ID"] if index > 0 else None
+            work_order["后续工单"] = normalized_work_orders[index + 1]["工单ID"] if index + 1 < len(normalized_work_orders) else None
+        normalized_items.append({"item_no": item_no, "item_id": item_id, "work_orders": normalized_work_orders})
+
+    if actual_item_nos and sorted(actual_item_nos) != expected_item_nos:
+        add_plan_issue(
+            errors,
+            "item_no_not_continuous",
+            "items",
+            "item_no 必须从 1 开始且连续。",
+            expected=expected_item_nos,
+            actual=sorted(actual_item_nos),
+        )
+
+    normalized_plan = {
+        "order": {
+            "order_id": order_id,
+            "product_id": product_id,
+            "product_name": product_name,
+            "quantity": quantity,
+            "订单状态": "已创建",
+            "订单创建时间": created_at_text,
+            "更新时间": created_at_text,
+        },
+        "items": normalized_items,
+        "work_orders": [
+            work_order
+            for item in normalized_items
+            for work_order in item.get("work_orders", [])
+        ],
+    }
+    return {
+        "success": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "normalized_plan": normalized_plan if not errors else None,
+        "draft_normalized_plan": normalized_plan,
+        "summary": {
+            "order_id": order_id,
+            "item_count": len(normalized_items),
+            "work_order_count": len(normalized_plan["work_orders"]),
+            "expected_route": expected_route,
+            "material_allocation": "pending",
+        },
+    }
+
+
+def persist_work_order_plan(arguments: dict[str, Any]) -> dict[str, Any]:
+    validation_result = validate_work_order_plan(arguments)
+    if not validation_result.get("success"):
+        return {
+            "success": False,
+            "message": "WorkOrderPlan 未通过校验，未写入工单。",
+            "validation": validation_result,
+        }
+
+    normalized_plan = validation_result["normalized_plan"]
+    order = normalized_plan["order"]
+    split_result = {
+        "order_id": order["order_id"],
+        "product": {
+            "product_id": order["product_id"],
+            "productId": order["product_id"],
+            "name": order["product_name"],
+        },
+        "quantity": order["quantity"],
+        "work_orders": normalized_plan["work_orders"],
+    }
+    persist_result = persist_production_order(
+        {
+            "order_id": order["order_id"],
+            "product_id": order["product_id"],
+            "product_name": order["product_name"],
+            "quantity": order["quantity"],
+        },
+        split_result,
+    )
+    return {
+        "success": True,
+        "message": "订单已基于 WorkOrderPlan 拆分工单并写入 MySQL，尚未投入调度。",
+        "validation": validation_result,
+        "production_persist": persist_result,
+        "scheduler_submission": None,
+        "scheduler_submission_required": True,
+    }
 
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     return [
         Tool(
-            name="split_product_order",
-            description=(
-                "三层生产拆单入口。数据工具层读取 Neo4j 产品/BOM/工艺路线/设备能力和 MySQL 库存/工站/订单；"
-                "智能体可传入 work_order_draft 草案 JSON；校验层会补全并校验工单链、设备、物料和前后置关系，"
-                "通过后只写入 MySQL order.work_orders，不自动投入后台调度队列。用户明确下发订单后再调用调度提交工具。"
-            ),
+            name="create_production_order",
+            description="创建生产订单，只写入 order.orders，不拆分工单，不提交调度。拆分工单必须基于已创建订单继续执行。",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "order_id": {
                         "type": "string",
-                        "description": "产品订单编号，可选；缺省由后端按 PO-YYYYMMDD-序号 生成，例如 PO-20260421-001。",
+                        "description": "订单编号。可选；缺省时按 PO-YYYYMMDD-序号 自动生成。",
                     },
                     "product_id": {
                         "type": "string",
-                        "description": "Neo4j product.product_id，可选；product_id 和 product_name 至少提供一个。",
+                        "description": "Neo4j 产品 ID，必填。",
                     },
                     "product_name": {
                         "type": "string",
-                        "description": "Neo4j Product.name，可选；product_id 和 product_name 至少提供一个。",
+                        "description": "产品名称，必填。",
                     },
                     "quantity": {
                         "type": "integer",
-                        "description": "订单内产品件数。大于 1 时校验层会按 items 拆分；未传 items 时按 quantity 自动生成 ITEM 工单链。",
+                        "description": "订单内产品件数。当前订单表不保存生产数量，但后续 WorkOrderPlan 必须使用该数量生成 items。",
                         "default": 1,
                     },
-                    "pallet_id": {
+                    "remark": {
                         "type": "string",
-                        "description": "物料盘编号，可选；默认使用 {order_id}-PALLET。",
-                    },
-                    "agv_id": {
-                        "type": "string",
-                        "description": "执行运输任务的 AGV 设备编号，可选；默认 DEV005。",
-                    },
-                    "materials": {
-                        "type": "array",
-                        "description": "本次订单选择的出库物料，可选；元素可为物料编号字符串或包含物料编号/物料名称的对象。",
-                    },
-                    "material_ids": {
-                        "type": "array",
-                        "description": "本次订单选择的出库物料编号列表，可选。",
-                    },
-                    "work_order_draft": {
-                        "type": "object",
-                        "description": (
-                            "智能体规划层生成的工单草案 JSON，可选。推荐结构为 order + items，"
-                            "每个 item 包含 item_no、item_id、work_orders。每条工单至少提供 sequence、工单类型、工序编号、分配设备、description。"
-                            "校验层会按 Neo4j 工序顺序、MySQL 设备和库存上下文补全工单ID、前后置工单、起始/目标工站、AGV转运和物料明细。"
-                        ),
+                        "description": "订单备注，可选。",
                     },
                 },
-                "required": [],
+                "required": ["product_id", "product_name"],
             },
         ),
         Tool(
@@ -1642,15 +2182,62 @@ async def list_tools() -> list[Tool]:
                 "required": ["order_id"],
             },
         ),
+        Tool(
+            name="validate_work_order_plan",
+            description=(
+                "基于已创建订单校验生产智能体生成的 WorkOrderPlan。要求 order_id 对应订单已存在，order.product_id 和 product_name 同时存在，"
+                "按 item 独立链路校验工单 sequence、类型、工序、设备、AGV 运输、Neo4j 工艺路线和物料大类数量，"
+                "并补齐 item_id、工单ID、前后置关系、状态、创建时间、更新时间，返回可落库的规范化工单。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "plan": {
+                        "type": "object",
+                        "description": "生产智能体输出的 WorkOrderPlan；也可以直接把 WorkOrderPlan 作为工具参数传入。",
+                    },
+                    "allow_existing": {
+                        "type": "boolean",
+                        "description": "是否允许订单已存在工单。默认 false，存在工单时返回校验错误。",
+                        "default": False,
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="persist_work_order_plan",
+            description=(
+                "基于已创建订单拆分并落库工单。内部先调用 validate_work_order_plan 校验和补全，"
+                "校验通过后写入 order.work_orders，并把订单推进到已计划；不自动投入调度。"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "plan": {
+                        "type": "object",
+                        "description": "生产智能体输出的 WorkOrderPlan；也可以直接把 WorkOrderPlan 作为工具参数传入。",
+                    },
+                    "allow_existing": {
+                        "type": "boolean",
+                        "description": "是否允许订单已存在工单。默认 false，存在工单时返回校验错误。",
+                        "default": False,
+                    },
+                },
+            },
+        ),
     ]
 
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> Sequence[TextContent]:
-    if name == "split_product_order":
-        result = split_order(arguments or {})
+    if name == "create_production_order":
+        result = create_production_order(arguments or {})
     elif name == "submit_order_to_scheduler":
         result = submit_order_to_scheduler(arguments or {})
+    elif name == "validate_work_order_plan":
+        result = validate_work_order_plan(arguments or {})
+    elif name == "persist_work_order_plan":
+        result = persist_work_order_plan(arguments or {})
     else:
         raise ValueError(f"unknown tool: {name}")
     return [
