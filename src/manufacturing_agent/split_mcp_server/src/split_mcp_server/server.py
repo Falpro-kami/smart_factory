@@ -122,7 +122,6 @@ ORDER_ID_SEQUENCE_WIDTH = 3
 PLAN_WORK_ORDER_TYPES = ("出库", "加工", "质检", "贴标", "入库", "运输")
 PLAN_TYPE_PROCESS_MAP = {
     "出库": "OUTPUT-001",
-    "加工": "PROC-001",
     "质检": "DETECT-001",
     "贴标": "LABEL-001",
     "入库": "INPUT-001",
@@ -145,6 +144,9 @@ PLAN_MATERIAL_EFFECT_MAP = {
     "入库": "store_in",
     "运输": "transfer",
 }
+PLAN_FIXED_PROCESS_IDS = {"OUTPUT-001", "DETECT-001", "LABEL-001", "INPUT-001"}
+PLAN_FIXED_OUTPUT_PROCESS_ID = "OUTPUT-001"
+PLAN_FINAL_PRODUCT_PROCESS_IDS = {"DETECT-001", "LABEL-001", "INPUT-001"}
 
 
 def ensure_order_status_schema(cursor: Any) -> None:
@@ -1552,10 +1554,12 @@ def read_plan_process_specs(product_id: str, product_name: str) -> dict[str, Any
                 WHERE toLower(type(use_rel)) = 'uses'
                 OPTIONAL MATCH (proc)-[produce_rel]->(produced)
                 WHERE toLower(type(produce_rel)) = 'produces'
+                OPTIONAL MATCH (proc)-[:CAN_RUN_ON]->(dev)
+                WHERE any(label IN labels(dev) WHERE toLower(label) = 'device')
                 RETURN
                   coalesce(proc.process_id, proc.processId, proc.process_code, proc.code, proc.stepId) AS process_id,
                   coalesce(proc.process_type, proc.processType, '') AS process_type,
-                  coalesce(proc.order, proc.stepId, proc.process_id, proc.name, '') AS sort_key,
+                  coalesce(rel.order, rel.sequence, proc.order, proc.stepId, proc.process_id, proc.name, '') AS sort_key,
                   collect(DISTINCT CASE WHEN used IS NULL THEN NULL ELSE {
                     material_type: coalesce(used.name, used.type, used.material_type, used.materialType),
                     quantity: coalesce(use_rel.quantity, 1)
@@ -1563,7 +1567,8 @@ def read_plan_process_specs(product_id: str, product_name: str) -> dict[str, Any
                   collect(DISTINCT CASE WHEN produced IS NULL THEN NULL ELSE {
                     material_type: coalesce(produced.name, produced.type, produced.material_type, produced.materialType),
                     quantity: coalesce(produce_rel.quantity, 1)
-                  } END) AS produces
+                  } END) AS produces,
+                  collect(DISTINCT coalesce(dev.deviceId, dev.device_id, dev.id, dev.name)) AS devices
                 ORDER BY sort_key
                 """,
                 product_node_id=str(product["_node_id"]),
@@ -1571,31 +1576,68 @@ def read_plan_process_specs(product_id: str, product_name: str) -> dict[str, Any
             route: list[str] = []
             process_specs: dict[str, Any] = {}
             material_catalog: set[str] = set()
+            produced_keys: set[str] = set()
             for record in result:
                 process_id = str(record.get("process_id") or "").strip()
                 if not process_id:
                     continue
                 route.append(process_id)
-                uses = [
-                    normalize_plan_material_requirement(item)
-                    for item in (record.get("uses") or [])
-                    if item
-                ]
-                produces = [
-                    normalize_plan_material_requirement(item)
-                    for item in (record.get("produces") or [])
-                    if item
-                ]
+                if process_id in PLAN_FIXED_PROCESS_IDS:
+                    uses = []
+                    produces = []
+                else:
+                    uses = [
+                        normalize_plan_material_requirement(item)
+                        for item in (record.get("uses") or [])
+                        if item
+                    ]
+                    produces = [
+                        normalize_plan_material_requirement(item)
+                        for item in (record.get("produces") or [])
+                        if item
+                    ]
                 for material in (*uses, *produces):
                     material_type = normalize_match_text(material.get("material_type"))
                     if material_type:
                         material_catalog.add(material_type)
+                for material in produces:
+                    key = normalize_match_text(material.get("material_type"))
+                    if key:
+                        produced_keys.add(key)
                 process_specs[process_id] = {
                     "process_id": process_id,
-                    "process_type": str(record.get("process_type") or PLAN_PROCESS_TYPE_MAP.get(process_id) or ""),
+                    "process_type": str(record.get("process_type") or PLAN_PROCESS_TYPE_MAP.get(process_id) or "加工"),
                     "uses": uses,
                     "produces": produces,
+                    "devices": [str(device_id) for device_id in (record.get("devices") or []) if str(device_id or "").strip()],
                 }
+            raw_inputs: list[dict[str, Any]] = []
+            final_outputs: list[dict[str, Any]] = []
+            for process_id in route:
+                if process_id in PLAN_FIXED_PROCESS_IDS:
+                    continue
+                spec = process_specs.get(process_id) or {}
+                for material in spec.get("uses") or []:
+                    if normalize_match_text(material.get("material_type")) not in produced_keys:
+                        raw_inputs.append(material)
+                if spec.get("produces"):
+                    final_outputs = list(spec.get("produces") or [])
+            if raw_inputs and PLAN_FIXED_OUTPUT_PROCESS_ID in process_specs:
+                process_specs[PLAN_FIXED_OUTPUT_PROCESS_ID]["uses"] = raw_inputs
+                process_specs[PLAN_FIXED_OUTPUT_PROCESS_ID]["produces"] = raw_inputs
+                for material in raw_inputs:
+                    material_type = normalize_match_text(material.get("material_type"))
+                    if material_type:
+                        material_catalog.add(material_type)
+            if final_outputs:
+                for fixed_process_id in PLAN_FINAL_PRODUCT_PROCESS_IDS:
+                    if fixed_process_id in process_specs:
+                        process_specs[fixed_process_id]["uses"] = final_outputs
+                        process_specs[fixed_process_id]["produces"] = final_outputs
+                        for material in final_outputs:
+                            material_type = normalize_match_text(material.get("material_type"))
+                            if material_type:
+                                material_catalog.add(material_type)
             return {
                 "product": {key: value for key, value in product.items() if key != "_node_id"},
                 "route": route,
@@ -1936,10 +1978,29 @@ def validate_work_order_plan(arguments: dict[str, Any]) -> dict[str, Any]:
                     expected=expected_process_id,
                     actual=process_id_value,
                 )
+            if work_order_type == "加工" and process_id_value in (*PLAN_FIXED_PROCESS_IDS, "AGV-TRANSPORT"):
+                add_plan_issue(
+                    errors,
+                    "process_type_mismatch",
+                    f"{work_order_path}.工序编号",
+                    "加工工单必须使用产品加工路线中的加工工序编号。",
+                    actual=process_id_value,
+                )
+            process_spec = process_specs.get(process_id_value)
+            expected_devices = list((process_spec or {}).get("devices") or [])
             expected_device = PLAN_PROCESS_DEVICE_MAP.get(process_id_value)
             if assigned_device and device_ids and assigned_device not in device_ids:
                 add_plan_issue(errors, "unknown_device", f"{work_order_path}.分配设备", "分配设备不存在。", device_id=assigned_device)
-            if expected_device and assigned_device and assigned_device != expected_device:
+            if expected_devices and assigned_device and assigned_device not in expected_devices:
+                add_plan_issue(
+                    errors,
+                    "device_process_mismatch",
+                    f"{work_order_path}.分配设备",
+                    "分配设备和工序编号不匹配。",
+                    expected=expected_devices,
+                    actual=assigned_device,
+                )
+            elif expected_device and assigned_device and assigned_device != expected_device:
                 add_plan_issue(
                     errors,
                     "device_process_mismatch",
@@ -1967,7 +2028,6 @@ def validate_work_order_plan(arguments: dict[str, Any]) -> dict[str, Any]:
                         expected=assigned_device,
                         actual=target_device,
                     )
-            process_spec = process_specs.get(process_id_value)
             input_materials, output_materials = validate_plan_materials(
                 raw_work_order,
                 process_spec,
