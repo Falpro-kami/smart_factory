@@ -10,7 +10,7 @@ description: 使用 split_mcp_server 先创建生产订单，再基于已创建�
 ## 固定流程
 
 1. 查询 Neo4j 产品基础信息，确定 `product_id`、`product_name`、`quantity`。
-2. 调用 `create_production_order` 创建订单。
+2. 调用 `create_production_order` 创建订单，并将 `quantity` 写入 MySQL `order.orders`.`生产数量`。
 3. 查询 Neo4j 工艺路线、输入/输出物料和可执行设备。
 4. 查询 MySQL 设备、订单和已有工单。
 5. 基于已创建订单生成 `WorkOrderPlan` JSON。
@@ -27,4 +27,12 @@ description: 使用 split_mcp_server 先创建生产订单，再基于已创建�
 
 ## 输出
 
-向用户简要说明校验是否通过、工单数、item 数，以及订单是否已经投入调度。不要展示完整 SQL、Cypher 或数据库连接细节。
+拆分工单并调用 `persist_work_order_plan` 落库后，最终回复必须打印完整 WorkOrderPlan JSON。
+
+输出规则：
+
+- 优先打印 `persist_work_order_plan` 返回结果中的 `validation.normalized_plan`。
+- 如果校验失败，打印 `validation.draft_normalized_plan`，并简要说明失败原因。
+- 不要只输出校验摘要、工单数或 item 数。
+- 不要展示完整 SQL、Cypher 或数据库连接细节。
+- 除非用户要求说明过程，否则最终回复只输出 JSON 对象，不添加 Markdown 代码块或额外解释。

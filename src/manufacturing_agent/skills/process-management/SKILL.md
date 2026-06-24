@@ -210,6 +210,36 @@ WHERE p.product_id = $product_id OR p.name = $product_name
 RETURN properties(p) AS product
 ```
 
+查询产品路线时，必须先在 `WITH` 中计算排序字段并排序，再聚合返回。不要在 `RETURN collect(...)` 后直接 `ORDER BY hs.order`，Neo4j 不允许聚合返回后再访问聚合前变量。
+
+```cypher
+MATCH (p:product)
+WHERE p.product_id = $product_id OR p.name = $product_name
+MATCH (p)-[hs:has_step]->(proc:process)
+OPTIONAL MATCH (proc)-[:CAN_RUN_ON]->(dev:device)
+OPTIONAL MATCH (proc)-[u:uses]->(in_mat:material)
+OPTIONAL MATCH (proc)-[pr:produces]->(out_mat:material)
+WITH
+  p,
+  proc,
+  hs,
+  dev,
+  coalesce(hs.order, hs.sequence, proc.stepId, proc.order, 0) AS sort_key,
+  collect(DISTINCT {name: in_mat.name, type: in_mat.type, quantity: coalesce(u.quantity, 1)}) AS uses,
+  collect(DISTINCT {name: out_mat.name, type: out_mat.type, quantity: coalesce(pr.quantity, 1)}) AS produces
+ORDER BY sort_key
+RETURN
+  properties(p) AS product,
+  collect({
+    order: sort_key,
+    process: properties(proc),
+    has_step: properties(hs),
+    device: properties(dev),
+    uses: uses,
+    produces: produces
+  }) AS route
+```
+
 查询指定设备能力时使用：
 
 ```cypher
@@ -415,15 +445,23 @@ MATCH (p:product {product_id: $product_id})-[hs:has_step]->(proc:process)
 OPTIONAL MATCH (proc)-[u:uses]->(in_mat:material)
 OPTIONAL MATCH (proc)-[pr:produces]->(out_mat:material)
 OPTIONAL MATCH (proc)-[:CAN_RUN_ON]->(dev:device)
-RETURN
-  p.product_id AS product_id,
-  p.name AS product_name,
-  hs.order AS order,
-  proc.process_id AS process_id,
+WITH
+  p,
+  hs,
+  proc,
+  coalesce(hs.order, hs.sequence, proc.stepId, proc.order, 0) AS sort_key,
   collect(DISTINCT {name: in_mat.name, quantity: u.quantity}) AS uses,
   collect(DISTINCT {name: out_mat.name, quantity: pr.quantity}) AS produces,
   collect(DISTINCT dev.deviceId) AS devices
-ORDER BY order
+ORDER BY sort_key
+RETURN
+  p.product_id AS product_id,
+  p.name AS product_name,
+  sort_key AS order,
+  proc.process_id AS process_id,
+  uses,
+  produces,
+  devices
 ```
 
 确认：

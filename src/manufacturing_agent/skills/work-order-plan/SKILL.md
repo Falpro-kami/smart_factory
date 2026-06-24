@@ -7,6 +7,8 @@ description: 生成生产订单 WorkOrderPlan JSON。用于把产品工艺路线
 
 只输出一个 JSON 对象，不输出解释文字、Markdown、代码块或注释。
 
+生成完成后，必须把完整 WorkOrderPlan JSON 打印在最终回复中。不要只保存到文件、不要只传给工具、不要省略 JSON 内容。
+
 ## 生成前先一次性查询
 
 在生成 JSON 前，先一次性查清以下信息，再一次性生成完整 JSON。

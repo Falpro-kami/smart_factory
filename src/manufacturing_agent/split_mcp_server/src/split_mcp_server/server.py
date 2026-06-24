@@ -1158,6 +1158,7 @@ def ensure_live_order_tables(cursor: Any) -> None:
         CREATE TABLE IF NOT EXISTS `orders` (
             `订单ID` VARCHAR(64) PRIMARY KEY,
             `产品名称` VARCHAR(128) DEFAULT '',
+            `生产数量` INT NOT NULL DEFAULT 1,
             `订单状态` ENUM('已创建','已计划','已下发','生产中','已完成','失败') NOT NULL DEFAULT '已创建',
             `订单创建时间` DATETIME NOT NULL,
             `更新时间` DATETIME NULL,
@@ -1193,11 +1194,9 @@ def ensure_live_order_tables(cursor: Any) -> None:
 
 def ensure_live_order_columns(cursor: Any) -> None:
     order_columns = table_columns(cursor, "order", "orders")
-    if "生产数量" in order_columns:
-        cursor.execute("ALTER TABLE `orders` DROP COLUMN `生产数量`")
-        order_columns.remove("生产数量")
     order_additions = {
         "产品名称": "`产品名称` VARCHAR(128) DEFAULT ''",
+        "生产数量": "`生产数量` INT NOT NULL DEFAULT 1",
         "订单状态": "`订单状态` ENUM('已创建','已计划','已下发','生产中','已完成','失败') NOT NULL DEFAULT '已创建'",
         "订单创建时间": "`订单创建时间` DATETIME NULL",
         "更新时间": "`更新时间` DATETIME NULL",
@@ -1340,15 +1339,17 @@ def create_production_order(arguments: dict[str, Any]) -> dict[str, Any]:
             cursor.execute(
                 f"""
                 INSERT INTO `orders` (
-                    {order_id_col}, `产品名称`, `订单状态`, `订单创建时间`, `更新时间`, `备注`
-                ) VALUES (%s, %s, '已创建', %s, %s, %s)
+                    {order_id_col}, `产品名称`, `生产数量`, `订单状态`, `订单创建时间`, `更新时间`, `备注`
+                ) VALUES (%s, %s, %s, '已创建', %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     `产品名称` = VALUES(`产品名称`),
+                    `生产数量` = VALUES(`生产数量`),
                     `更新时间` = VALUES(`更新时间`)
                 """,
                 (
                     order_id,
                     product_name,
+                    quantity,
                     now,
                     now,
                     str(arguments.get("remark") or arguments.get("备注") or ""),
@@ -1393,15 +1394,17 @@ def persist_production_order(arguments: dict[str, Any], split_result: dict[str, 
             cursor.execute(
                 f"""
                 INSERT INTO `orders` (
-                    {order_id_col}, `产品名称`, `订单状态`, `订单创建时间`, `更新时间`, `备注`
-                ) VALUES (%s, %s, '已创建', %s, %s, %s)
+                    {order_id_col}, `产品名称`, `生产数量`, `订单状态`, `订单创建时间`, `更新时间`, `备注`
+                ) VALUES (%s, %s, %s, '已创建', %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     `产品名称` = VALUES(`产品名称`),
+                    `生产数量` = VALUES(`生产数量`),
                     `更新时间` = VALUES(`更新时间`)
                 """,
                 (
                     order_id,
                     product_name,
+                    quantity,
                     now,
                     now,
                     str(arguments.get("remark") or arguments.get("备注") or ""),
@@ -2220,7 +2223,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "quantity": {
                         "type": "integer",
-                        "description": "订单内产品件数。当前订单表不保存生产数量，但后续 WorkOrderPlan 必须使用该数量生成 items。",
+                        "description": "生产数量，写入 MySQL order.orders.`生产数量`；后续 WorkOrderPlan 必须使用该数量生成 items。",
                         "default": 1,
                     },
                     "remark": {
