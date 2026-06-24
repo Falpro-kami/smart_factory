@@ -1070,13 +1070,18 @@ def find_route_steps(session, product_node_id: str) -> list[dict[str, Any]]:
         WHERE toLower(type(use_rel)) = 'uses'
         OPTIONAL MATCH (step)-[produce_rel]->(produced)
         WHERE toLower(type(produce_rel)) = 'produces'
-        OPTIONAL MATCH (step)-[next_rel]->(next_step)<-[:has_step]-(p)
-        WHERE toLower(type(next_rel)) = 'to'
+        OPTIONAL MATCH (step)-[product_next_rel]->(product_next_step)<-[:has_step]-(p)
+        WHERE toLower(type(product_next_rel)) = 'to'
+          AND product_next_rel.product_id = coalesce(p.product_id, p.productId, p.name)
+        OPTIONAL MATCH (step)-[legacy_next_rel]->(legacy_next_step)<-[:has_step]-(p)
+        WHERE toLower(type(legacy_next_rel)) = 'to'
+          AND product_next_rel IS NULL
+          AND legacy_next_rel.product_id IS NULL
         RETURN
           properties(step) AS step_props,
           properties(step) AS process_props,
           properties(step_device) AS device_props,
-          properties(next_step) AS next_props,
+          properties(coalesce(product_next_step, legacy_next_step)) AS next_props,
           collect(DISTINCT {node: properties(used), rel: properties(use_rel)}) AS uses,
           collect(DISTINCT {node: properties(produced), rel: properties(produce_rel)}) AS produces,
           coalesce(rel.order, rel.sequence, step.stepId, step.name, '') AS sort_key

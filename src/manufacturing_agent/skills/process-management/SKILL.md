@@ -17,7 +17,8 @@ process
 material
 device
 
-(product)-[:has_step {order}]->(process)
+(product)-[:has_step {order, sequence, name, to}]->(process)
+(process)-[:to {product_id, sequence, name, to}]->(next_process)
 (process)-[:uses {quantity}]->(material)
 (process)-[:produces {quantity}]->(material)
 (process)-[:CAN_RUN_ON]->(device)
@@ -32,7 +33,7 @@ product_id
 product_name
 加工工序列表
 每道工序的 process_id
-每道工序的顺序 order
+每道工序的顺序 order/sequence
 每道工序的执行设备 deviceId
 每道工序的输入物料和 quantity
 每道工序的输出物料和 quantity
@@ -142,6 +143,15 @@ N+3. INPUT-001 入库
 
 运输不写入产品 `has_step` 路线；运输工单由后续 WorkOrderPlan 生成阶段根据相邻工单设备变化自动插入。
 
+产品路线必须同时写入两类顺序关系：
+
+```text
+product -[:has_step]-> process：表示该产品包含哪些工序，以及每个工序的顺序号
+process -[:to]-> next_process：表示该产品内相邻工序的前后连接
+```
+
+因为固定工序是全局节点，`:to` 关系必须带 `product_id`，不要创建不带 `product_id` 的 `to` 关系。
+
 固定工序对应关系：
 
 ```text
@@ -247,7 +257,36 @@ MERGE (dev:device {deviceId: $device_id})
 MATCH (p:product {product_id: $product_id})
 MATCH (proc:process {process_id: $process_id})
 MERGE (p)-[hs:has_step]->(proc)
-SET hs.order = $order
+SET
+  hs.order = $order,
+  hs.sequence = $order,
+  hs.name = $process_short_name,
+  hs.to = $process_id
+```
+
+`has_step.order` 和 `has_step.sequence` 必须同时写入，值相同，表示该产品内的工艺顺序。
+`has_step.name` 写工序短名称，例如出库、轮胎底盘总成组装、质检。
+`has_step.to` 写目标工序编号，例如 `PROC-008`。
+
+相邻工序连接：
+
+```cypher
+MATCH (current:process {process_id: $current_process_id})
+MATCH (next:process {process_id: $next_process_id})
+MERGE (current)-[r:to {product_id: $product_id}]->(next)
+SET
+  r.sequence = $sequence,
+  r.name = $current_process_short_name + '->' + $next_process_short_name,
+  r.to = $next_process_id
+```
+
+`to.sequence` 写当前连接的顺序号，从 1 开始。例如 7 个工序需要 6 条 `to` 关系：
+
+```text
+1: 第1道工序 -> 第2道工序
+2: 第2道工序 -> 第3道工序
+...
+6: 第6道工序 -> 第7道工序
 ```
 
 输入物料：
@@ -280,7 +319,7 @@ MERGE (proc)-[:CAN_RUN_ON]->(dev)
 
 ```cypher
 MATCH (a)-[r]->(b)
-WHERE type(r) IN ['has_step', 'uses', 'produces', 'CAN_RUN_ON']
+WHERE type(r) IN ['has_step', 'to', 'uses', 'produces', 'CAN_RUN_ON']
 WITH elementId(a) AS start_id, elementId(b) AS end_id, type(r) AS rel_type, count(r) AS rel_count
 WHERE rel_count > 1
 RETURN start_id, end_id, rel_type, rel_count
@@ -390,10 +429,14 @@ ORDER BY order
 确认：
 
 - `has_step.order` 连续且顺序正确。
+- `has_step.sequence` 连续且与 `has_step.order` 一致。
+- `has_step.name` 和 `has_step.to` 已写入。
+- 相邻工序之间存在带当前 `product_id` 的 `to` 关系，数量等于工序数量减 1。
+- `to.sequence` 从 1 开始连续，`to.to` 等于下一道工序编号。
 - 产品路线必须包含固定工序 `OUTPUT-001`、`DETECT-001`、`LABEL-001`、`INPUT-001`。
 - 每个工序都有执行设备。
 - 每个 `uses` 和 `produces` 关系都有 `quantity`。
 - 每个物料节点都有 `type`，且只能是 `原材料`、`半成品`、`成品`。
 - 中间产物名称前后一致。
-- 不存在重复的 `has_step`、`uses`、`produces`、`CAN_RUN_ON` 关系。
+- 不存在重复的 `has_step`、`to`、`uses`、`produces`、`CAN_RUN_ON` 关系。
 - 未写入用户未确认的字段。
